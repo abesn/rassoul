@@ -33,7 +33,7 @@ export function SiteHeader() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-40 backdrop-blur bg-white/85 dark:bg-slate-950/85 border-b border-slate-200/70 dark:border-slate-800/70">
+    <header className="sticky top-0 z-40 backdrop-blur bg-white/85 dark:bg-slate-950/85 border-b border-brand-500">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           <Link href="/" aria-label="Rassoul home" className="flex items-center">
