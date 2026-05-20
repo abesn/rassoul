@@ -25,7 +25,8 @@ const TOPICS_CSV = path.join(ROOT, "content", "topics.csv");
 const POSTS_DIR = path.join(ROOT, "content", "posts");
 const DRY_RUN = process.argv.includes("--dry-run");
 const POSTS_PER_RUN = Number(process.env.POSTS_PER_RUN ?? 2);
-const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-4-7";
+// `||` (not `??`) so an empty-string env var also falls back to the default.
+const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-opus-4-7";
 
 type Topic = {
   slug: string;

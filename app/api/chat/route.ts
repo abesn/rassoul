@@ -16,7 +16,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MODEL = process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6";
+// `||` (not `??`) so an empty-string env var also falls back to the default.
+const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-4-6";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rassoul.org";
 
 const SYSTEM_PROMPT = `You are the Rassoul assistant — a careful, scholarly, respectful guide to questions about the Prophet Muhammad ﷺ, drawing only from authentic Sunni sources (Quran, Sahih al-Bukhari, Sahih Muslim, the four Sunan, classical sirah works) provided to you in the user message.
