@@ -182,20 +182,83 @@ Affiliate spots to slot in:
 - Halal investing platforms (Zoya, Wahed) in any post mentioning rizq or wealth
 - Islamic book publishers
 
-## Deployment to Vercel
+## Deployment to DigitalOcean App Platform
+
+Hosted as a single Node.js Web Service on App Platform Basic tier (~$5/mo, 512MB RAM).
+Content pages are statically generated; API routes (`/api/chat`, `/api/donate/*`) run
+as serverful endpoints.
+
+The spec lives in [.do/app.yaml](.do/app.yaml). Two ways to deploy:
+
+### Option A — UI (one-time)
+
+1. Go to <https://cloud.digitalocean.com/apps/new>.
+2. Connect GitHub, select `abesn/rassoul`, branch `main`.
+3. App Platform auto-detects `.do/app.yaml`.
+4. Click through. App Platform builds with `npm install && npm run build` and runs
+   `npm start`.
+
+### Option B — CLI
 
 ```bash
-vercel link
-vercel env add NEXT_PUBLIC_SITE_URL production  # https://rassoul.org
-vercel --prod
+brew install doctl
+doctl auth init
+doctl apps create --spec .do/app.yaml
 ```
 
-Or just import the GitHub repo at <https://vercel.com/new>. Connect the domain in
-the Vercel dashboard → Domains → Add → `rassoul.org`.
+### After first deploy: set secrets
 
-DNS at your registrar (Sav.com): point the apex A record (or use `ALIAS`/`ANAME`) to
-Vercel's IP per their setup wizard. This will also fix the cert mismatch you currently
-have on the apex.
+In the App Platform UI → Settings → App-Level Environment Variables, set the SECRET
+envs (they're declared in `app.yaml` without values):
+
+- `ANTHROPIC_API_KEY` — https://console.anthropic.com
+- `SUNNAH_API_KEY` — https://sunnah.com/developers (free)
+- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` — https://console.upstash.com (free)
+- `DONOR_COOKIE_SECRET` — generate with `openssl rand -base64 48`
+- `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — https://dashboard.stripe.com
+
+The deploy will redeploy automatically after you save secrets.
+
+### Connect the domain
+
+In the App Platform UI → Settings → Domains:
+
+- Add `rassoul.org` as PRIMARY
+- Add `www.rassoul.org` as ALIAS (already declared in `app.yaml`)
+
+App Platform issues Let's Encrypt certs automatically — fixes the cert mismatch
+you currently have on the apex.
+
+At your registrar (Sav.com), update DNS:
+
+| Record | Value |
+|---|---|
+| A `@` | `Use the IP shown in App Platform → Domains` (or use a CNAME flattening service) |
+| CNAME `www` | `<your-app>.ondigitalocean.app` |
+
+(App Platform will tell you the exact records to add after you submit the domain.)
+
+### Configure the Stripe webhook
+
+After the domain is live:
+
+1. Stripe Dashboard → Developers → Webhooks → Add endpoint
+2. URL: `https://rassoul.org/api/donate/webhook`
+3. Event: `checkout.session.completed`
+4. Copy the signing secret → App Platform → Settings → Environment Variables →
+   update `STRIPE_WEBHOOK_SECRET` → save (triggers a redeploy).
+
+### Scaling
+
+If `basic-xxs` (512MB) starts struggling under traffic, edit `.do/app.yaml`:
+
+```yaml
+instance_size_slug: basic-xs   # $12/mo, 1GB RAM
+# or
+instance_size_slug: basic-s    # $25/mo, 1GB RAM, 1 dedicated vCPU
+```
+
+Push to main. App Platform handles the rolling deploy.
 
 ## License
 
