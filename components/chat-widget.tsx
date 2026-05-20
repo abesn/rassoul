@@ -1,20 +1,18 @@
 "use client";
 /**
- * Floating chat widget. Soft-launched: only renders when the URL contains ?chat=1
- * or localStorage has rassoul_chat_enabled=1. Flip the env flag NEXT_PUBLIC_CHAT_PUBLIC=1
- * to make it visible to everyone.
+ * Floating chat widget. Visible on every page.
+ *
+ * Set NEXT_PUBLIC_CHAT_HIDDEN=1 to hide it (e.g., during a maintenance window).
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
-const CHAT_PUBLIC = process.env.NEXT_PUBLIC_CHAT_PUBLIC === "1";
+const HIDDEN = process.env.NEXT_PUBLIC_CHAT_HIDDEN === "1";
 const STORAGE_KEY = "rassoul_chat_history_v1";
-const ENABLED_KEY = "rassoul_chat_enabled";
 
 export function ChatWidget() {
-  const [enabled, setEnabled] = useState(false);
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -22,21 +20,6 @@ export function ChatWidget() {
   const [meta, setMeta] = useState<{ donor: boolean; remaining: number; limit: number } | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Enable detection: ?chat=1 OR localStorage flag OR env flag
-  useEffect(() => {
-    if (CHAT_PUBLIC) {
-      setEnabled(true);
-      return;
-    }
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("chat") === "1") {
-      localStorage.setItem(ENABLED_KEY, "1");
-      setEnabled(true);
-      return;
-    }
-    if (localStorage.getItem(ENABLED_KEY) === "1") setEnabled(true);
-  }, []);
 
   // Restore history
   useEffect(() => {
@@ -57,7 +40,7 @@ export function ChatWidget() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [msgs]);
 
-  if (!enabled) return null;
+  if (HIDDEN) return null;
 
   async function send() {
     const q = input.trim();
@@ -140,45 +123,76 @@ export function ChatWidget() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label="Ask about the Prophet ﷺ"
-        className="fixed bottom-5 right-5 z-50 rounded-full bg-emerald-600 text-white px-4 py-3 shadow-lg hover:bg-emerald-700 transition"
+        aria-label={open ? "Close chat" : "Ask about the Prophet ﷺ"}
+        className="fixed bottom-5 right-5 z-50 rounded-full bg-brand-500 text-white pl-4 pr-5 py-3 shadow-lg hover:bg-brand-600 transition flex items-center gap-2"
       >
-        {open ? "Close" : "Ask about the Prophet ﷺ"}
+        {open ? (
+          <>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="6" y1="18" x2="18" y2="6" />
+            </svg>
+            Close
+          </>
+        ) : (
+          <>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span className="text-sm font-medium">Ask about the Prophet ﷺ</span>
+          </>
+        )}
       </button>
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-20 right-5 z-50 w-[min(420px,calc(100vw-2.5rem))] h-[min(640px,calc(100vh-7rem))] flex flex-col rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 shadow-2xl">
-          <header className="px-4 py-3 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between">
+        <div className="fixed bottom-20 right-5 z-50 w-[min(420px,calc(100vw-2.5rem))] h-[min(640px,calc(100vh-7rem))] flex flex-col rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+          <header className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-900">
             <div>
               <h2 className="text-sm font-semibold">Rassoul Assistant</h2>
-              <p className="text-xs text-stone-500">Source-grounded. AI, not a scholar.</p>
+              <p className="text-[11px] text-slate-500">Source-grounded. AI, not a scholar.</p>
             </div>
             {meta && !meta.donor && meta.remaining >= 0 && (
-              <span className="text-xs text-stone-500">{meta.remaining}/{meta.limit} left today</span>
+              <span className="text-[11px] rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-slate-600 dark:text-slate-300">
+                {meta.remaining}/{meta.limit} left today
+              </span>
             )}
-            {meta?.donor && <span className="text-xs text-emerald-600">Donor · unlimited</span>}
+            {meta?.donor && (
+              <span className="text-[11px] rounded-full bg-brand-50 dark:bg-brand-900/30 px-2 py-1 text-brand-700 dark:text-brand-300 font-medium">
+                Donor · unlimited
+              </span>
+            )}
           </header>
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-sm">
             {msgs.length === 0 && (
-              <div className="text-stone-500 space-y-2">
+              <div className="text-slate-500 space-y-3">
                 <p>Ask anything about the life, teachings, and example of the Prophet Muhammad ﷺ.</p>
                 <p>Every answer cites its primary source. If sources don't cover your question, I'll say so.</p>
-                <ul className="mt-3 space-y-1 text-xs text-stone-400">
-                  <li>· When was the Prophet ﷺ born?</li>
-                  <li>· What did he say about kindness to parents?</li>
-                  <li>· Tell me about the Battle of Badr</li>
-                </ul>
+                <div className="mt-4 grid gap-2">
+                  {[
+                    "When was the Prophet ﷺ born?",
+                    "What did he say about kindness to parents?",
+                    "Tell me about the Battle of Badr",
+                  ].map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => setInput(q)}
+                      className="text-left text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-brand-500 hover:text-brand-500"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {msgs.map((m, i) => (
               <div key={i} className={m.role === "user" ? "text-right" : ""}>
                 <div
-                  className={`inline-block max-w-[85%] rounded-lg px-3 py-2 whitespace-pre-wrap ${
+                  className={`inline-block max-w-[85%] rounded-2xl px-3.5 py-2.5 whitespace-pre-wrap leading-relaxed ${
                     m.role === "user"
-                      ? "bg-emerald-600 text-white"
-                      : "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                      ? "bg-brand-500 text-white"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   }`}
                 >
                   {m.content || (streaming && i === msgs.length - 1 ? "…" : "")}
@@ -186,14 +200,14 @@ export function ChatWidget() {
               </div>
             ))}
             {rateLimited && (
-              <div className="rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 p-3 text-stone-700 dark:text-stone-200">
-                <p className="text-sm font-medium">Unlock unlimited questions</p>
-                <p className="text-xs mt-1">
+              <div className="rounded-xl border border-brand-200 bg-brand-50 dark:bg-brand-900/30 dark:border-brand-700/40 p-3">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Unlock unlimited questions</p>
+                <p className="text-xs mt-1 text-slate-600 dark:text-slate-300">
                   Donate any amount to support the site and remove daily limits for 90 days.
                 </p>
                 <Link
                   href="/donate"
-                  className="mt-2 inline-block rounded-md bg-emerald-600 text-white text-xs px-3 py-1.5 hover:bg-emerald-700"
+                  className="mt-2 inline-block rounded-full bg-brand-500 text-white text-xs px-3 py-1.5 hover:bg-brand-600"
                 >
                   Donate
                 </Link>
@@ -202,7 +216,7 @@ export function ChatWidget() {
           </div>
 
           <form
-            className="border-t border-stone-200 dark:border-stone-700 p-3 flex gap-2"
+            className="border-t border-slate-200 dark:border-slate-700 p-3 flex gap-2 bg-white dark:bg-slate-900"
             onSubmit={(e) => {
               e.preventDefault();
               send();
@@ -213,13 +227,13 @@ export function ChatWidget() {
               onChange={(e) => setInput(e.target.value)}
               disabled={streaming || rateLimited}
               placeholder={rateLimited ? "Daily limit reached — donate to continue" : "Ask a question…"}
-              className="flex-1 rounded-md border border-stone-300 dark:border-stone-700 bg-transparent px-3 py-2 text-sm outline-none focus:border-emerald-500 disabled:opacity-50"
+              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
               maxLength={1000}
             />
             <button
               type="submit"
               disabled={streaming || rateLimited || !input.trim()}
-              className="rounded-md bg-emerald-600 text-white px-3 py-2 text-sm disabled:opacity-50"
+              className="rounded-lg bg-brand-500 text-white px-3.5 py-2 text-sm font-medium hover:bg-brand-600 disabled:opacity-50"
             >
               {streaming ? "…" : "Send"}
             </button>

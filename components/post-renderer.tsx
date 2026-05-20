@@ -5,7 +5,7 @@ import type { Post } from "@/lib/posts";
 
 const components = {
   Arabic: ({ children }: { children: React.ReactNode }) => (
-    <div className="arabic-block my-6 text-stone-900 dark:text-stone-100">{children}</div>
+    <div className="arabic-block my-6 text-slate-900 dark:text-slate-100">{children}</div>
   ),
   Citation: ({
     source,
@@ -22,7 +22,7 @@ const components = {
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className="text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 no-underline"
+      className="text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 no-underline hover:bg-brand-100 dark:hover:bg-brand-900/50"
     >
       {source}
       {book ? ` · ${book}` : ""}
@@ -33,18 +33,24 @@ const components = {
 
 export function PostRenderer({ post }: { post: Post }) {
   return (
-    <article className="prose prose-stone dark:prose-invert">
-      <header className="not-prose mb-8">
-        <p className="text-xs uppercase tracking-wide text-emerald-600">
+    <article className="prose prose-slate dark:prose-invert prose-headings:font-display prose-headings:tracking-tight">
+      <header className="not-prose mb-10 pb-8 border-b border-slate-200 dark:border-slate-800">
+        <p className="text-xs uppercase tracking-wider text-brand-500 font-medium">
           {post.cluster.replace(/-/g, " ")}
         </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">{post.title}</h1>
+        <h1 className="mt-3 text-3xl md:text-4xl font-display font-semibold tracking-tightest leading-tight">
+          {post.title}
+        </h1>
         {post.description && (
-          <p className="mt-2 text-stone-500 text-lg">{post.description}</p>
+          <p className="mt-3 text-slate-500 text-lg">{post.description}</p>
         )}
         {post.publishedAt && (
-          <time className="mt-2 block text-xs text-stone-500" dateTime={post.publishedAt}>
-            Published {new Date(post.publishedAt).toLocaleDateString("en-US", {
+          <time
+            className="mt-4 block text-xs text-slate-500 uppercase tracking-wider"
+            dateTime={post.publishedAt}
+          >
+            Published{" "}
+            {new Date(post.publishedAt).toLocaleDateString("en-US", {
               year: "numeric",
               month: "long",
               day: "numeric",

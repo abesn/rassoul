@@ -34,18 +34,21 @@ export default function DonatePage() {
   }
 
   return (
-    <div className="max-w-xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Support Rassoul</h1>
-      <p className="mt-4 text-stone-600 dark:text-stone-300">
+    <div className="max-w-xl mx-auto">
+      <p className="text-xs uppercase tracking-wider text-brand-500 font-medium">Support</p>
+      <h1 className="mt-2 text-3xl md:text-4xl font-display font-semibold tracking-tightest">
+        Donate to Rassoul
+      </h1>
+      <p className="mt-4 text-slate-600 dark:text-slate-300">
         Every donation, no matter the amount, unlocks unlimited chatbot questions for 90 days on
         this browser. Beyond that, it keeps the lights on for source-grounded da'wah content that
         cites every claim back to its primary source.
       </p>
-      <p className="mt-3 text-sm text-stone-500">
+      <p className="mt-3 text-sm text-slate-500">
         One-time, secure card payment via Stripe. No subscription. No recurring charges.
       </p>
 
-      <div className="mt-8 space-y-4">
+      <div className="mt-10 space-y-5">
         <div className="grid grid-cols-4 gap-2">
           {PRESETS.map((p) => (
             <button
@@ -55,10 +58,10 @@ export default function DonatePage() {
                 setAmount(p);
                 setCustom("");
               }}
-              className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-3 text-sm font-medium transition ${
                 amount === p && !custom
-                  ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200"
-                  : "border-stone-300 dark:border-stone-700 hover:border-emerald-500"
+                  ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
+                  : "border-slate-300 dark:border-slate-700 hover:border-brand-500"
               }`}
             >
               ${p}
@@ -66,9 +69,11 @@ export default function DonatePage() {
           ))}
         </div>
         <div>
-          <label className="block text-xs text-stone-500 mb-1">Or enter a custom amount (USD)</label>
-          <div className="flex items-center rounded-md border border-stone-300 dark:border-stone-700 focus-within:border-emerald-500">
-            <span className="px-3 text-stone-500">$</span>
+          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">
+            Or enter a custom amount (USD)
+          </label>
+          <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700 focus-within:border-brand-500">
+            <span className="px-3 text-slate-500">$</span>
             <input
               type="number"
               min="1"
@@ -76,19 +81,27 @@ export default function DonatePage() {
               value={custom}
               onChange={(e) => setCustom(e.target.value)}
               placeholder="Any amount, $1 minimum"
-              className="flex-1 bg-transparent py-2 pr-3 outline-none"
+              className="flex-1 bg-transparent py-2.5 pr-3 outline-none"
             />
           </div>
         </div>
-        {err && <p className="text-sm text-red-600">{err}</p>}
+        {err && (
+          <p className="rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-3 py-2 text-sm">
+            {err}
+          </p>
+        )}
         <button
           onClick={start}
           disabled={loading}
-          className="w-full rounded-md bg-emerald-600 px-4 py-3 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+          className="w-full rounded-lg bg-brand-500 px-4 py-3.5 text-white font-medium hover:bg-brand-600 disabled:opacity-50"
         >
           {loading ? "Opening Stripe…" : "Donate"}
         </button>
       </div>
+
+      <p className="mt-8 text-xs text-slate-500 text-center">
+        May Allah accept it from you.
+      </p>
     </div>
   );
 }
