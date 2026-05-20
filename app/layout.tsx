@@ -20,6 +20,11 @@ export const metadata: Metadata = {
     locale: "en_US",
   },
   alternates: { canonical: "/" },
+  icons: {
+    icon: [{ url: "/favicon.png", type: "image/png", sizes: "261x261" }],
+    apple: [{ url: "/favicon.png", type: "image/png", sizes: "261x261" }],
+    shortcut: ["/favicon.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
