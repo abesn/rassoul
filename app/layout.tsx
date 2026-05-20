@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ChatWidget } from "@/components/chat-widget";
 import "./globals.css";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rassoul.org";
@@ -63,10 +64,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               . If you spot an error, please open an issue on GitHub.
             </p>
             <p className="mt-3">
-              © {new Date().getFullYear()} Rassoul · <Link href="/feed.xml">RSS</Link>
+              © {new Date().getFullYear()} Rassoul · <Link href="/feed.xml">RSS</Link> ·{" "}
+              <Link href="/donate" className="text-emerald-600 hover:underline">
+                Donate
+              </Link>
             </p>
           </div>
         </footer>
+        <ChatWidget />
       </body>
     </html>
   );

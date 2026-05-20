@@ -114,6 +114,60 @@ Every post must:
 The generator validates citations against fetched sources. Posts that fail validation
 are marked `needs_review` in topics.csv — you'll see them in the PR.
 
+## The chat assistant
+
+A floating "Ask about the Prophet ﷺ" widget powered by Claude with strict RAG over
+sunnah.com, quran.com, and the site's own MDX corpus. Sunni-default stance.
+
+- **Free tier:** 5 questions per IP per day (configurable via `CHAT_FREE_DAILY_LIMIT`).
+- **Unlimited tier:** any donation via Stripe Checkout (min $1) unlocks unlimited
+  questions on that browser for 90 days via a signed `rassoul_donor` cookie.
+- **Soft launch:** the widget is hidden by default. Visit any page with `?chat=1`
+  to enable it on your browser. Set `NEXT_PUBLIC_CHAT_PUBLIC=1` to make it visible
+  to everyone.
+
+### Architecture
+
+```
+User Q  →  /api/chat
+            ├─ donor cookie? → bypass rate limit
+            ├─ else: Upstash rate limit (5/day per IP)
+            ├─ RAG retrieval:
+            │    - quran.com search (top 4 verses)
+            │    - sunnah.com search (top 6 hadith)
+            │    - local MDX corpus (top 3 posts)
+            ├─ Claude with strict citation system prompt
+            └─ stream SSE response
+```
+
+### Required env vars
+
+| Var | Source |
+|---|---|
+| `ANTHROPIC_API_KEY` | https://console.anthropic.com |
+| `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | https://console.upstash.com (free) |
+| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | https://dashboard.stripe.com |
+| `DONOR_COOKIE_SECRET` | `openssl rand -base64 48` |
+| `NEXT_PUBLIC_SITE_URL` | `https://rassoul.org` |
+
+### Stripe webhook
+
+After deploying, add a webhook at https://dashboard.stripe.com/webhooks:
+- URL: `https://rassoul.org/api/donate/webhook`
+- Events: `checkout.session.completed`
+- Copy the signing secret into `STRIPE_WEBHOOK_SECRET`
+
+The webhook records the session id in Upstash with a 90-day TTL; the success page
+then exchanges that for a signed donor cookie.
+
+### Safety notes
+
+The chat system prompt forbids inventing hadith. If retrieval returns no sources,
+Claude is instructed to decline rather than improvise. Every response cites every
+factual claim inline. **Log the first few weeks of chat traffic** (it ships
+unlogged by default; add Vercel KV or Postgres if you want to review) before you
+remove the soft-launch flag.
+
 ## Monetization layer (set up later — when traffic warrants)
 
 Don't add ads before ~5k monthly visitors. When you're ready:
