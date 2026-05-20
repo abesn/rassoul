@@ -22,15 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
-
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
+          node-version: "22"
 
-      - run: pnpm install --frozen-lockfile=false
+      - run: npm install --no-audit --no-fund
 
       - name: Generate weekly content
         env:
@@ -38,7 +34,7 @@ jobs:
           SUNNAH_API_KEY: ${{ secrets.SUNNAH_API_KEY }}
           POSTS_PER_RUN: ${{ inputs.posts_per_run || '2' }}
           CLAUDE_MODEL: claude-opus-4-7
-        run: pnpm run generate:weekly
+        run: npm run generate:weekly
 
       - name: Open PR with generated content
         uses: peter-evans/create-pull-request@v6
@@ -54,7 +50,7 @@ jobs:
             - [ ] Skim each new MDX file for accuracy and tone
             - [ ] Verify all `<Citation>` links resolve to the right source
             - [ ] Check `topics.csv` for any rows now marked `needs_review`
-            - [ ] Merge if everything checks out — Vercel will redeploy automatically
+            - [ ] Merge if everything checks out — DO will redeploy automatically
           delete-branch: true
           add-paths: |
             content/posts/**
