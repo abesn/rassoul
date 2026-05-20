@@ -1,0 +1,42 @@
+{
+  "name": "rassoul-org",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Da'wah content site. AI-assisted, source-grounded.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "generate:weekly": "tsx scripts/generate-weekly-content.ts",
+    "generate:dry": "tsx scripts/generate-weekly-content.ts --dry-run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.0",
+    "@next/mdx": "^15.0.0",
+    "@types/mdx": "^2.0.13",
+    "gray-matter": "^4.0.3",
+    "next": "^15.0.0",
+    "next-mdx-remote": "^5.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "rehype-slug": "^6.0.0",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.15",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "csv-parse": "^5.6.0",
+    "csv-stringify": "^6.5.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

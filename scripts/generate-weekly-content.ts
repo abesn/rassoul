@@ -1,0 +1,232 @@
+/**
+ * Weekly content generator.
+ *
+ * 1. Read content/topics.csv
+ * 2. Pick the next N topics with status === "pending", ordered by priority_score desc
+ * 3. For each topic:
+ *    - Search sunnah.com + quran.com for primary-source material on the keyword
+ *    - Call Claude with a strict source-grounded prompt
+ *    - Validate every citation in the output is one of the fetched sources
+ *    - Write the MDX file to content/posts/{cluster}/{slug}.mdx
+ * 4. Mark topic as published in topics.csv (or note "needs_review" if validation failed)
+ *
+ * Run: pnpm run generate:weekly
+ * Dry: pnpm run generate:dry
+ */
+import fs from "node:fs/promises";
+import path from "node:path";
+import { parse } from "csv-parse/sync";
+import { stringify } from "csv-stringify/sync";
+import Anthropic from "@anthropic-ai/sdk";
+import { searchQuran, searchSunnah, formatSourcesForPrompt, type QuranVerse, type Hadith } from "../lib/sources";
+
+const ROOT = path.resolve(__dirname, "..");
+const TOPICS_CSV = path.join(ROOT, "content", "topics.csv");
+const POSTS_DIR = path.join(ROOT, "content", "posts");
+const DRY_RUN = process.argv.includes("--dry-run");
+const POSTS_PER_RUN = Number(process.env.POSTS_PER_RUN ?? 2);
+const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-4-7";
+
+type Topic = {
+  slug: string;
+  title: string;
+  cluster: string;
+  keyword: string;
+  search_volume: string;
+  keyword_difficulty: string;
+  cpc: string;
+  priority_score: string;
+  intent: string;
+  status: string;
+  published_at: string;
+  url: string;
+};
+
+const SYSTEM_PROMPT = `You are a meticulous Muslim writer producing a single da'wah blog post for rassoul.org.
+
+Non-negotiable rules:
+1. EVERY hadith you reference MUST come from the "Verified hadiths" list in the user message. Cite it inline using <Citation source="..." book="..." number="..." href="..." />. Do NOT invent, paraphrase from memory, or attribute hadiths to sources not in the list.
+2. EVERY Quran verse you reference MUST come from the "Verified Quran verses" list. Cite it the same way.
+3. If you do not have enough verified sources to cover a section, omit that section. Quality over completeness.
+4. Use the Arabic component for any block of Arabic text: <Arabic>{"النص العربي"}</Arabic>
+5. Voice: respectful, scholarly but accessible, never preachy, no exclamation marks, no emojis.
+6. When mentioning the Prophet Muhammad, use ﷺ after his name (or after "the Prophet" / "the Messenger").
+7. Output ONLY a single MDX file body. NO frontmatter (we add it), NO leading commentary, NO closing notes.
+8. Structure: open with a 1–2 sentence answer to the search-intent question. Then 3–6 H2 sections. Close with a "Sources" H2 listing all citations as plain markdown links.
+9. Target length: 900–1600 words.
+10. If a verifiable Arabic dua/ayah exists in your sources, include it in an <Arabic> block, then transliteration in italics, then English translation, then citation.
+11. NEVER use the AI-detection-tripping phrases: "in conclusion", "it is important to note", "delve into", "in today's world", "navigate the", "tapestry", "embark on a journey".`;
+
+async function readTopics(): Promise<Topic[]> {
+  const raw = await fs.readFile(TOPICS_CSV, "utf8");
+  return parse(raw, { columns: true, skip_empty_lines: true }) as Topic[];
+}
+
+async function writeTopics(topics: Topic[]): Promise<void> {
+  const out = stringify(topics, { header: true });
+  await fs.writeFile(TOPICS_CSV, out, "utf8");
+}
+
+function pickNext(topics: Topic[]): Topic[] {
+  return topics
+    .filter((t) => t.status === "pending")
+    .sort((a, b) => Number(b.priority_score) - Number(a.priority_score))
+    .slice(0, POSTS_PER_RUN);
+}
+
+function buildAllowedReferences(verses: QuranVerse[], hadiths: Hadith[]): Set<string> {
+  const allowed = new Set<string>();
+  for (const v of verses) allowed.add(v.reference.toLowerCase());
+  for (const h of hadiths) allowed.add(h.reference.toLowerCase());
+  return allowed;
+}
+
+function findCitedReferences(mdx: string): string[] {
+  // Match <Citation source="..." book="..." number="..." />
+  const re = /<Citation\s+([^/]*?)\/>/g;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(mdx))) {
+    const attrs = m[1];
+    const source = attrs.match(/source="([^"]+)"/)?.[1] ?? "";
+    const book = attrs.match(/book="([^"]+)"/)?.[1] ?? "";
+    const number = attrs.match(/number="([^"]+)"/)?.[1] ?? "";
+    const ref = [source, book, number].filter(Boolean).join(" ").trim();
+    if (ref) out.push(ref.toLowerCase());
+  }
+  return out;
+}
+
+async function generateOnePost(topic: Topic, client: Anthropic): Promise<{ mdx: string; valid: boolean; notes: string[] }> {
+  // 1) Gather primary sources keyed off the topic's search keyword
+  const [verses, hadiths] = await Promise.all([
+    searchQuran(topic.keyword, 5).catch(() => []),
+    searchSunnah(topic.keyword, 8).catch(() => []),
+  ]);
+
+  const sourcesBlock = formatSourcesForPrompt({ verses, hadiths });
+
+  // 2) Call Claude
+  const userPrompt = `Topic: ${topic.title}
+Cluster: ${topic.cluster}
+Target search keyword: "${topic.keyword}"
+
+${sourcesBlock}
+
+Write the MDX body now, following every rule in the system message. Begin immediately with the answer paragraph.`;
+
+  const resp = await client.messages.create({
+    model: MODEL,
+    max_tokens: 4096,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const mdx = resp.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+  // 3) Validate citations
+  const allowed = buildAllowedReferences(verses, hadiths);
+  const cited = findCitedReferences(mdx);
+  const notes: string[] = [];
+  let valid = true;
+  for (const c of cited) {
+    // Match if any allowed reference contains all tokens of the cited reference
+    const tokens = c.split(/\s+/);
+    const ok = [...allowed].some((a) => tokens.every((t) => a.includes(t)));
+    if (!ok) {
+      valid = false;
+      notes.push(`Unverified citation: "${c}"`);
+    }
+  }
+  if (cited.length === 0 && (verses.length > 0 || hadiths.length > 0)) {
+    notes.push("Post has no citations despite available primary sources.");
+    valid = false;
+  }
+
+  return { mdx, valid, notes };
+}
+
+function frontmatter(topic: Topic, notes: string[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const desc = `${topic.title} — sourced from authentic Quran and hadith references.`;
+  const lines = [
+    "---",
+    `title: ${JSON.stringify(topic.title)}`,
+    `description: ${JSON.stringify(desc)}`,
+    `cluster: ${topic.cluster}`,
+    `keyword: ${JSON.stringify(topic.keyword)}`,
+    `publishedAt: "${today}"`,
+    `updatedAt: "${today}"`,
+  ];
+  if (notes.length) lines.push(`reviewNotes: ${JSON.stringify(notes)}`);
+  lines.push("---", "");
+  return lines.join("\n");
+}
+
+async function main() {
+  if (!process.env.ANTHROPIC_API_KEY && !DRY_RUN) {
+    throw new Error("ANTHROPIC_API_KEY is required. Run with --dry-run to validate the pipeline only.");
+  }
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "dry-run" });
+  const topics = await readTopics();
+  const picks = pickNext(topics);
+
+  if (picks.length === 0) {
+    console.log("No pending topics. topics.csv is exhausted — add more rows.");
+    return;
+  }
+
+  console.log(`Picked ${picks.length} topic(s) for this run:`);
+  for (const t of picks) {
+    console.log(`  [${t.cluster}] ${t.title} (kw="${t.keyword}", score=${t.priority_score})`);
+  }
+
+  if (DRY_RUN) {
+    console.log("\n--dry-run: skipping API calls. Source-fetch dry-run below:");
+    for (const t of picks) {
+      const [v, h] = await Promise.all([
+        searchQuran(t.keyword, 3).catch(() => []),
+        searchSunnah(t.keyword, 3).catch(() => []),
+      ]);
+      console.log(`  ${t.slug}: ${v.length} verses, ${h.length} hadiths available`);
+    }
+    return;
+  }
+
+  for (const topic of picks) {
+    console.log(`\n→ Generating: ${topic.title}`);
+    try {
+      const { mdx, valid, notes } = await generateOnePost(topic, client);
+      const outDir = path.join(POSTS_DIR, topic.cluster);
+      await fs.mkdir(outDir, { recursive: true });
+      const outPath = path.join(outDir, `${topic.slug}.mdx`);
+      await fs.writeFile(outPath, frontmatter(topic, notes) + mdx, "utf8");
+
+      // Update topic row
+      const idx = topics.findIndex((t) => t.slug === topic.slug);
+      if (idx >= 0) {
+        topics[idx].status = valid ? "published" : "needs_review";
+        topics[idx].published_at = new Date().toISOString();
+        topics[idx].url = `/${topic.cluster}/${topic.slug}`;
+      }
+
+      console.log(`  ✓ wrote ${path.relative(ROOT, outPath)} (${valid ? "valid" : "NEEDS REVIEW"})`);
+      if (notes.length) for (const n of notes) console.log(`    ! ${n}`);
+    } catch (err) {
+      console.error(`  ✗ failed: ${(err as Error).message}`);
+    }
+  }
+
+  await writeTopics(topics);
+  console.log("\nDone. Review the diff and merge.");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
