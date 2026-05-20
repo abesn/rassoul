@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -35,15 +36,15 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 backdrop-blur bg-white/85 dark:bg-slate-950/85 border-b border-slate-200/70 dark:border-slate-800/70">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
-          <Link
-            href="/"
-            className="font-display font-semibold tracking-tightest text-lg flex items-center gap-2"
-          >
-            <span
-              aria-hidden
-              className="inline-block w-2.5 h-2.5 rounded-full bg-brand-500"
+          <Link href="/" aria-label="Rassoul home" className="flex items-center">
+            <Image
+              src="/logo.png"
+              alt="Rassoul.org"
+              width={500}
+              height={113}
+              priority
+              className="h-9 md:h-10 w-auto dark:brightness-110"
             />
-            Rassoul
           </Link>
 
           {/* Desktop nav */}
