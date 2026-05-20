@@ -1,9 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 export default function DonateSuccess() {
+  return (
+    <Suspense fallback={<p className="text-stone-500">Loading…</p>}>
+      <DonateSuccessInner />
+    </Suspense>
+  );
+}
+
+function DonateSuccessInner() {
   const params = useSearchParams();
   const sessionId = params.get("session_id");
   const [status, setStatus] = useState<"verifying" | "ok" | "pending" | "error">("verifying");
