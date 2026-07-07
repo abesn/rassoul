@@ -64,15 +64,16 @@ const SYSTEM_PROMPT = `You are a meticulous Muslim writer producing a single da'
 Non-negotiable rules:
 1. EVERY hadith you reference MUST come from the "Verified hadiths" list in the user message. Cite it inline using <Citation source="..." book="..." number="..." href="..." />. Do NOT invent, paraphrase from memory, or attribute hadiths to sources not in the list.
 2. EVERY Quran verse you reference MUST come from the "Verified Quran verses" list. Cite it the same way.
-3. If you do not have enough verified sources to cover a section, omit that section. Quality over completeness.
-4. Use the Arabic component for any block of Arabic text: <Arabic>{"النص العربي"}</Arabic>
-5. Voice: respectful, scholarly but accessible, never preachy, no exclamation marks, no emojis.
-6. When mentioning the Prophet Muhammad, use ﷺ after his name (or after "the Prophet" / "the Messenger").
-7. Output ONLY a single MDX file body. NO frontmatter (we add it), NO leading commentary, NO closing notes.
-8. Structure: open with a 1–2 sentence answer to the search-intent question. Then 3–6 H2 sections. Close with a "Sources" H2 listing all citations as plain markdown links.
-9. Target length: 900–1600 words.
-10. If a verifiable Arabic dua/ayah exists in your sources, include it in an <Arabic> block, then transliteration in italics, then English translation, then citation.
-11. NEVER use the AI-detection-tripping phrases: "in conclusion", "it is important to note", "delve into", "in today's world", "navigate the", "tapestry", "embark on a journey".`;
+3. HARD RULE — attribution requires citation. You may NEVER write "the Prophet said", "the Messenger said", "he ﷺ said", "he ﷺ narrated", "he ﷺ taught", "he ﷺ told", "he ﷺ instructed", "he ﷺ warned", "he ﷺ advised", "he ﷺ mentioned", "he ﷺ commanded", "he ﷺ forbade", "he ﷺ described", "he ﷺ explained", "Allah said", "Allah says", "the Quran says", or any other speech-attribution phrase UNLESS the very next sentence (or the same sentence) contains a <Citation> tag OR a markdown link to https://sunnah.com/... / https://quran.com/... anchoring that claim to a verified source. If the sources don't cover it, DO NOT ATTRIBUTE — rephrase as your own analysis or leave it out.
+4. If you do not have enough verified sources to cover a section, omit that section. Quality over completeness.
+5. Use the Arabic component for any block of Arabic text: <Arabic>{"النص العربي"}</Arabic>
+6. Voice: respectful, scholarly but accessible, never preachy, no exclamation marks, no emojis.
+7. When mentioning the Prophet Muhammad, use ﷺ after his name (or after "the Prophet" / "the Messenger").
+8. Output ONLY a single MDX file body. NO frontmatter (we add it), NO leading commentary, NO closing notes.
+9. Structure: open with a 1–2 sentence answer to the search-intent question. Then 3–6 H2 sections. Close with a "Sources" H2 listing all citations as plain markdown links.
+10. Target length: 900–1600 words.
+11. If a verifiable Arabic dua/ayah exists in your sources, include it in an <Arabic> block, then transliteration in italics, then English translation, then citation.
+12. NEVER use the AI-detection-tripping phrases: "in conclusion", "it is important to note", "delve into", "in today's world", "navigate the", "tapestry", "embark on a journey".`;
 
 async function readTopics(): Promise<Topic[]> {
   const raw = await fs.readFile(TOPICS_CSV, "utf8");
@@ -116,6 +117,57 @@ function buildAllowedReferences(verses: QuranVerse[], hadiths: Hadith[]): Set<st
   for (const v of verses) allowed.add(v.reference.toLowerCase());
   for (const h of hadiths) allowed.add(h.reference.toLowerCase());
   return allowed;
+}
+
+/**
+ * Detects sentences that attribute speech to the Prophet ﷺ (or Allah / the Quran)
+ * without a nearby citation. Returns human-readable snippets for each violation.
+ *
+ * "Nearby" = within a ~300-character window after the attribution phrase, OR
+ * within the same sentence. That window must contain either a <Citation> tag
+ * or a link to sunnah.com / quran.com.
+ *
+ * This is the hardest guard: even if Claude's prose slips past the <Citation>
+ * validator, this catches "the Prophet said X" without a source and marks the
+ * post as needs_review — which blocks auto-merge.
+ */
+function findUnverifiedAttributions(mdx: string): string[] {
+  const patterns: RegExp[] = [
+    // Prophetic speech attributions
+    /\b(?:the\s+)?(?:prophet|messenger|he)\s*(?:ﷺ|\(saw\)|\(pbuh\)|,?\s*peace be upon him)?\s+(said|narrated|reported|taught|told|mentioned|explained|warned|advised|instructed|declared|stated|informed|described|promised|ordered|commanded|prohibited|forbade|encouraged|counseled|urged|answered|replied|asked|responded)\b/gi,
+    // Divine speech / Quran attributions
+    /\b(?:allah(?:'s)?|the\s+almighty|the\s+quran|the\s+qur'an|allah\s+ta'ala|almighty\s+allah|god)\s+(said|says|tells|told|reveals|revealed|declares|declared|commands|commanded|warns|warned|instructs|instructed|informs|informed|promises|promised)\b/gi,
+  ];
+
+  const problems: string[] = [];
+  const seen = new Set<string>();
+
+  for (const re of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(mdx))) {
+      const attributionStart = m.index;
+      // Look forward 350 chars for a citation OR sunnah/quran link.
+      const windowEnd = Math.min(mdx.length, attributionStart + 350);
+      const windowStr = mdx.slice(attributionStart, windowEnd);
+      const hasCitation =
+        /<Citation\b/.test(windowStr) ||
+        /https?:\/\/sunnah\.com\//.test(windowStr) ||
+        /https?:\/\/quran\.com\//.test(windowStr);
+
+      if (!hasCitation) {
+        // Extract a readable snippet: 20 chars before → 100 chars after
+        const snipStart = Math.max(0, attributionStart - 20);
+        const snipEnd = Math.min(mdx.length, attributionStart + 120);
+        const snippet = mdx.slice(snipStart, snipEnd).replace(/\s+/g, " ").trim();
+        const key = snippet.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          problems.push(`Uncited attribution: "…${snippet}…"`);
+        }
+      }
+    }
+  }
+  return problems;
 }
 
 function findCitedReferences(mdx: string): string[] {
@@ -169,6 +221,8 @@ Write the MDX body now, following every rule in the system message. Begin immedi
   const cited = findCitedReferences(mdx);
   const notes: string[] = [];
   let valid = true;
+
+  // 1) <Citation> tag references must match a fetched source
   for (const c of cited) {
     const tokens = c.split(/\s+/);
     const ok = [...allowed].some((a) => tokens.every((t) => a.includes(t)));
@@ -177,9 +231,19 @@ Write the MDX body now, following every rule in the system message. Begin immedi
       notes.push(`Unverified citation: "${c}"`);
     }
   }
+
   if (cited.length === 0 && (verses.length > 0 || hadiths.length > 0)) {
     notes.push("Post has no citations despite available primary sources.");
     valid = false;
+  }
+
+  // 2) Attribution guard: "the Prophet said" and similar must be accompanied
+  //    by a nearby <Citation> tag or sunnah.com / quran.com link. Anything
+  //    that fails this check is treated as needs_review, blocking auto-merge.
+  const attributionProblems = findUnverifiedAttributions(mdx);
+  if (attributionProblems.length) {
+    valid = false;
+    for (const p of attributionProblems) notes.push(p);
   }
 
   return { mdx, valid, notes };
