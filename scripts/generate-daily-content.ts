@@ -272,6 +272,15 @@ async function main() {
   console.log(
     `\nDone. Summary: ${succeeded} published, ${flagged} needs_review, ${failed} failed, ${skipped.length} clusters skipped.`,
   );
+
+  // Emit counts as GitHub Actions step outputs so the workflow can decide
+  // whether to auto-merge the PR (only when needs_review + failed both == 0).
+  if (process.env.GITHUB_OUTPUT) {
+    await fs.appendFile(
+      process.env.GITHUB_OUTPUT,
+      `published=${succeeded}\nneeds_review=${flagged}\nfailed=${failed}\nskipped=${skipped.length}\n`,
+    );
+  }
 }
 
 main().catch((err) => {

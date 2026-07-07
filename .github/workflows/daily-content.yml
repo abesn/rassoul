@@ -10,6 +10,10 @@ on:
         description: "Optional comma-separated clusters to limit this run (e.g. duas,sirah). Empty = all 10."
         required: false
         default: ""
+      auto_merge:
+        description: "Auto-merge if all posts pass citation validation"
+        required: false
+        default: "true"
 
 permissions:
   contents: write
@@ -29,6 +33,7 @@ jobs:
       - run: npm install --no-audit --no-fund
 
       - name: Generate today's content
+        id: gen
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUNNAH_API_KEY: ${{ secrets.SUNNAH_API_KEY }}
@@ -37,6 +42,7 @@ jobs:
         run: npm run generate:daily
 
       - name: Open PR with generated content
+        id: pr
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -46,16 +52,45 @@ jobs:
           body: |
             Auto-generated posts for today, one per cluster (up to 10).
 
-            **Reviewer checklist:**
+            **Generation summary**
+            - Published (validated): ${{ steps.gen.outputs.published || '0' }}
+            - Needs review (unverified citations): ${{ steps.gen.outputs.needs_review || '0' }}
+            - Failed (API errors): ${{ steps.gen.outputs.failed || '0' }}
+            - Clusters skipped (no pending topics): ${{ steps.gen.outputs.skipped || '0' }}
+
+            **Auto-merge policy:** this PR auto-merges when `needs_review = 0` AND `failed = 0`.
+            Any non-zero count above keeps this PR open for manual review.
+
+            **If open for review, checklist:**
             - [ ] Skim each new MDX file for accuracy and tone
             - [ ] Verify all `<Citation>` links resolve to the right source
-            - [ ] Check `topics.csv` for any rows now marked `needs_review`
-            - [ ] Merge if everything checks out — DO will redeploy automatically
-
-            If a cluster shows up as `needs_review`, its citations couldn't be
-            matched against the fetched primary sources. Read those before
-            merging (or drop the file).
+            - [ ] Check `topics.csv` for rows now marked `needs_review`
+            - [ ] Merge if everything checks out
           delete-branch: true
           add-paths: |
             content/posts/**
             content/topics.csv
+
+      - name: Auto-merge if all posts validated
+        if: >
+          steps.pr.outputs.pull-request-number
+          && steps.gen.outputs.needs_review == '0'
+          && steps.gen.outputs.failed == '0'
+          && (inputs.auto_merge == null || inputs.auto_merge == 'true')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "All ${{ steps.gen.outputs.published }} posts passed citation validation. Auto-merging."
+          gh pr merge ${{ steps.pr.outputs.pull-request-number }} \
+            --repo ${{ github.repository }} \
+            --squash --delete-branch
+
+      - name: Report manual-review needed
+        if: >
+          steps.pr.outputs.pull-request-number
+          && (steps.gen.outputs.needs_review != '0' || steps.gen.outputs.failed != '0')
+        run: |
+          echo "PR left open for manual review:"
+          echo "  needs_review = ${{ steps.gen.outputs.needs_review }}"
+          echo "  failed       = ${{ steps.gen.outputs.failed }}"
+          echo "  URL          = ${{ steps.pr.outputs.pull-request-url }}"
