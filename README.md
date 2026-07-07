@@ -1,29 +1,33 @@
 # Rassoul
 
-> Source-grounded da'wah content site. Next.js + MDX + a weekly AI content loop.
+> Source-grounded da'wah content site. Next.js + MDX + a daily AI content loop.
 
-A long-tail SEO content site sitting on the rassoul.org domain. Every post is built from
+A long-tail SEO content site on the rassoul.org domain. Every post is built from
 primary sources (sunnah.com, quran.com) — the AI generator is forbidden from inventing
 or paraphrasing hadith and ayat from memory.
 
 ## What this is
 
-- **Stack:** Next.js 15 (App Router) + MDX + Tailwind + TypeScript. Deploys to Vercel.
+- **Stack:** Next.js 15 (App Router) + MDX + Tailwind + TypeScript. Deploys to DigitalOcean App Platform.
 - **Content:** lives in `content/posts/<cluster>/<slug>.mdx`. Each cluster maps to a
   top-level route (`/duas`, `/sirah`, `/hadith`, `/names-of-allah`, etc.).
-- **Pipeline:** `content/topics.csv` holds the editorial backlog (200 rows ranked by
-  SEO opportunity). A weekly GitHub Action picks the next N pending topics, fetches
-  primary sources, asks Claude to write the post with strict citation rules, validates
-  every `<Citation>` against the fetched sources, and opens a PR.
+- **Pipeline:** `content/topics.csv` holds the editorial backlog (~450 rows ranked by
+  SEO opportunity). **Every day at 06:00 UTC**, a GitHub Action picks **one topic per
+  cluster** (10 clusters → up to 10 posts), fetches primary sources, asks Claude to
+  write each post with strict citation rules, validates every `<Citation>` against the
+  fetched sources, and opens a single PR.
 - **You merge.** The site rebuilds automatically.
+
+### The 10 clusters
+Duas · Sirah · Hadith · 99 Names of Allah · Names of the Messenger ﷺ · Quran · Sunnah · Ramadan · Hajj · Da'wah
 
 ## Quickstart
 
 ```bash
-pnpm install
+npm install
 cp .env.example .env.local
 # Fill in ANTHROPIC_API_KEY (and SUNNAH_API_KEY if you have one)
-pnpm run dev
+npm run dev
 ```
 
 Open <http://localhost:3000>.
@@ -32,25 +36,35 @@ Open <http://localhost:3000>.
 
 ```bash
 # Dry-run: shows what would be picked + what sources are available, no API calls
-pnpm run generate:dry
+npm run generate:dry
 
-# Real run: writes 2 posts (or POSTS_PER_RUN) to content/posts/**
-pnpm run generate:weekly
+# Real run: writes up to 10 posts (one per cluster) to content/posts/**
+npm run generate:daily
+
+# Limit to specific clusters (comma-separated)
+CLUSTERS_TODAY=duas,sirah npm run generate:daily
 ```
 
-After it runs, `topics.csv` rows for the published posts flip from `pending` to either
+After it runs, `topics.csv` rows for the picked posts flip from `pending` to either
 `published` or `needs_review`. Rows flagged `needs_review` had at least one citation
 that couldn't be matched against a fetched source — read those before merging.
 
-## The weekly loop (in production)
+## The daily loop (in production)
 
-1. GitHub Action fires every Monday 06:00 UTC.
-2. It runs `pnpm run generate:weekly` against `topics.csv`.
-3. It opens a PR titled `Weekly da'wah content — <run_id>`.
+1. GitHub Action fires every day at 06:00 UTC (~02:00 ET, 23:00 PT prior day).
+2. It runs `npm run generate:daily` against `topics.csv`.
+3. It opens a PR titled `Daily da'wah content — <run_id>`.
 4. You review and merge (or close).
-5. Vercel rebuilds on merge to `main`.
+5. DigitalOcean App Platform rebuilds automatically on merge to `main`.
 
-To trigger a run manually, go to Actions → "Weekly content generation" → Run workflow.
+Manual trigger: Actions → "Daily content generation" → Run workflow.
+
+### Cost expectations
+
+- 10 posts/day × ~$0.20 with Claude Opus 4.7 = **~$60/month API cost**
+- Or ~$20/month if you switch to Sonnet (`CLAUDE_MODEL=claude-sonnet-4-6` in the workflow)
+- ~450 topics in the backlog = ~45 days of runway before you need to top up `topics.csv`
+- Run `python3 tmp/build-topics.py` to regenerate the backlog with fresh keywords
 
 ## Required secrets (GitHub repo settings → Secrets)
 

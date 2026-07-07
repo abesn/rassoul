@@ -9,8 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "generate:weekly": "tsx scripts/generate-weekly-content.ts",
-    "generate:dry": "tsx scripts/generate-weekly-content.ts --dry-run"
+    "generate:daily": "tsx scripts/generate-daily-content.ts",
+    "generate:dry": "tsx scripts/generate-daily-content.ts --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",

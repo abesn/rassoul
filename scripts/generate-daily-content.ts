@@ -1,32 +1,48 @@
 /**
- * Weekly content generator.
+ * Daily content generator.
+ *
+ * Every day: one article per cluster (10 clusters → 10 articles).
  *
  * 1. Read content/topics.csv
- * 2. Pick the next N topics with status === "pending", ordered by priority_score desc
- * 3. For each topic:
- *    - Search sunnah.com + quran.com for primary-source material on the keyword
+ * 2. For each cluster, pick the highest-priority topic with status="pending"
+ * 3. For each pick:
+ *    - Search sunnah.com + quran.com for primary-source material
  *    - Call Claude with a strict source-grounded prompt
- *    - Validate every citation in the output is one of the fetched sources
+ *    - Validate every citation against fetched sources
  *    - Write the MDX file to content/posts/{cluster}/{slug}.mdx
- * 4. Mark topic as published in topics.csv (or note "needs_review" if validation failed)
+ * 4. Mark topic as published (or needs_review) in topics.csv
+ * 5. Continue past individual failures (per-topic try/catch)
  *
- * Run: pnpm run generate:weekly
- * Dry: pnpm run generate:dry
+ * Run: npm run generate:daily
+ * Dry: npm run generate:dry
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import Anthropic from "@anthropic-ai/sdk";
-import { searchQuran, searchSunnah, formatSourcesForPrompt, type QuranVerse, type Hadith } from "../lib/sources";
+import {
+  searchQuran,
+  searchSunnah,
+  formatSourcesForPrompt,
+  type QuranVerse,
+  type Hadith,
+} from "../lib/sources";
+import { CLUSTERS } from "../lib/posts";
 
 const ROOT = path.resolve(__dirname, "..");
 const TOPICS_CSV = path.join(ROOT, "content", "topics.csv");
 const POSTS_DIR = path.join(ROOT, "content", "posts");
 const DRY_RUN = process.argv.includes("--dry-run");
-const POSTS_PER_RUN = Number(process.env.POSTS_PER_RUN ?? 2);
 // `||` (not `??`) so an empty-string env var also falls back to the default.
 const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-opus-4-7";
+
+// Some clusters may be empty; also lets the user limit which clusters run today
+// via CLUSTERS_TODAY=duas,sirah,hadith (comma-separated slugs). Empty → all.
+const CLUSTERS_FILTER = (process.env.CLUSTERS_TODAY ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 type Topic = {
   slug: string;
@@ -68,11 +84,31 @@ async function writeTopics(topics: Topic[]): Promise<void> {
   await fs.writeFile(TOPICS_CSV, out, "utf8");
 }
 
-function pickNext(topics: Topic[]): Topic[] {
-  return topics
-    .filter((t) => t.status === "pending")
-    .sort((a, b) => Number(b.priority_score) - Number(a.priority_score))
-    .slice(0, POSTS_PER_RUN);
+/**
+ * Pick the highest-priority pending topic in each cluster. One per cluster.
+ * Clusters with no pending topics are silently skipped (logged as a warning
+ * inside main so the run doesn't fail).
+ */
+function pickDailyBatch(topics: Topic[]): { picks: Topic[]; skipped: string[] } {
+  const clusters = CLUSTERS.map((c) => c.slug).filter(
+    (c) => CLUSTERS_FILTER.length === 0 || CLUSTERS_FILTER.includes(c),
+  );
+
+  const picks: Topic[] = [];
+  const skipped: string[] = [];
+
+  for (const cluster of clusters) {
+    const pending = topics
+      .filter((t) => t.status === "pending" && t.cluster === cluster)
+      .sort((a, b) => Number(b.priority_score) - Number(a.priority_score));
+
+    if (pending.length > 0) {
+      picks.push(pending[0]);
+    } else {
+      skipped.push(cluster);
+    }
+  }
+  return { picks, skipped };
 }
 
 function buildAllowedReferences(verses: QuranVerse[], hadiths: Hadith[]): Set<string> {
@@ -83,7 +119,6 @@ function buildAllowedReferences(verses: QuranVerse[], hadiths: Hadith[]): Set<st
 }
 
 function findCitedReferences(mdx: string): string[] {
-  // Match <Citation source="..." book="..." number="..." />
   const re = /<Citation\s+([^/]*?)\/>/g;
   const out: string[] = [];
   let m: RegExpExecArray | null;
@@ -98,8 +133,10 @@ function findCitedReferences(mdx: string): string[] {
   return out;
 }
 
-async function generateOnePost(topic: Topic, client: Anthropic): Promise<{ mdx: string; valid: boolean; notes: string[] }> {
-  // 1) Gather primary sources keyed off the topic's search keyword
+async function generateOnePost(
+  topic: Topic,
+  client: Anthropic,
+): Promise<{ mdx: string; valid: boolean; notes: string[] }> {
   const [verses, hadiths] = await Promise.all([
     searchQuran(topic.keyword, 5).catch(() => []),
     searchSunnah(topic.keyword, 8).catch(() => []),
@@ -107,7 +144,6 @@ async function generateOnePost(topic: Topic, client: Anthropic): Promise<{ mdx: 
 
   const sourcesBlock = formatSourcesForPrompt({ verses, hadiths });
 
-  // 2) Call Claude
   const userPrompt = `Topic: ${topic.title}
 Cluster: ${topic.cluster}
 Target search keyword: "${topic.keyword}"
@@ -129,13 +165,11 @@ Write the MDX body now, following every rule in the system message. Begin immedi
     .join("\n")
     .trim();
 
-  // 3) Validate citations
   const allowed = buildAllowedReferences(verses, hadiths);
   const cited = findCitedReferences(mdx);
   const notes: string[] = [];
   let valid = true;
   for (const c of cited) {
-    // Match if any allowed reference contains all tokens of the cited reference
     const tokens = c.split(/\s+/);
     const ok = [...allowed].some((a) => tokens.every((t) => a.includes(t)));
     if (!ok) {
@@ -175,16 +209,19 @@ async function main() {
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "dry-run" });
   const topics = await readTopics();
-  const picks = pickNext(topics);
+  const { picks, skipped } = pickDailyBatch(topics);
 
   if (picks.length === 0) {
-    console.log("No pending topics. topics.csv is exhausted — add more rows.");
+    console.log("No pending topics in any cluster. topics.csv is exhausted — add more rows.");
     return;
   }
 
-  console.log(`Picked ${picks.length} topic(s) for this run:`);
+  console.log(`\nPicked ${picks.length} topic(s) — one per cluster:`);
   for (const t of picks) {
-    console.log(`  [${t.cluster}] ${t.title} (kw="${t.keyword}", score=${t.priority_score})`);
+    console.log(`  [${t.cluster.padEnd(24)}] ${t.title}  (score=${t.priority_score})`);
+  }
+  if (skipped.length) {
+    console.log(`\n⚠ Empty clusters (no pending topics): ${skipped.join(", ")}`);
   }
 
   if (DRY_RUN) {
@@ -194,13 +231,17 @@ async function main() {
         searchQuran(t.keyword, 3).catch(() => []),
         searchSunnah(t.keyword, 3).catch(() => []),
       ]);
-      console.log(`  ${t.slug}: ${v.length} verses, ${h.length} hadiths available`);
+      console.log(`  ${t.cluster}/${t.slug}: ${v.length} verses, ${h.length} hadiths available`);
     }
     return;
   }
 
+  let succeeded = 0;
+  let flagged = 0;
+  let failed = 0;
+
   for (const topic of picks) {
-    console.log(`\n→ Generating: ${topic.title}`);
+    console.log(`\n→ [${topic.cluster}] ${topic.title}`);
     try {
       const { mdx, valid, notes } = await generateOnePost(topic, client);
       const outDir = path.join(POSTS_DIR, topic.cluster);
@@ -208,7 +249,6 @@ async function main() {
       const outPath = path.join(outDir, `${topic.slug}.mdx`);
       await fs.writeFile(outPath, frontmatter(topic, notes) + mdx, "utf8");
 
-      // Update topic row
       const idx = topics.findIndex((t) => t.slug === topic.slug);
       if (idx >= 0) {
         topics[idx].status = valid ? "published" : "needs_review";
@@ -216,15 +256,22 @@ async function main() {
         topics[idx].url = `/${topic.cluster}/${topic.slug}`;
       }
 
-      console.log(`  ✓ wrote ${path.relative(ROOT, outPath)} (${valid ? "valid" : "NEEDS REVIEW"})`);
+      if (valid) succeeded++;
+      else flagged++;
+      console.log(`  ✓ wrote ${path.relative(ROOT, outPath)}  (${valid ? "published" : "NEEDS REVIEW"})`);
       if (notes.length) for (const n of notes) console.log(`    ! ${n}`);
     } catch (err) {
+      failed++;
       console.error(`  ✗ failed: ${(err as Error).message}`);
+      // continue to next cluster — one Anthropic hiccup shouldn't kill the day
     }
   }
 
   await writeTopics(topics);
-  console.log("\nDone. Review the diff and merge.");
+
+  console.log(
+    `\nDone. Summary: ${succeeded} published, ${flagged} needs_review, ${failed} failed, ${skipped.length} clusters skipped.`,
+  );
 }
 
 main().catch((err) => {
