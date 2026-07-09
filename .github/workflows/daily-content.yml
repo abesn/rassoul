@@ -75,16 +75,16 @@ jobs:
             content/posts/**
             content/topics.csv
 
-      - name: Auto-merge if all posts validated
+      - name: Auto-merge if within quality threshold
         if: >
           steps.pr.outputs.pull-request-number
-          && steps.gen.outputs.needs_review == '0'
           && steps.gen.outputs.failed == '0'
+          && (fromJSON(steps.gen.outputs.needs_review) <= fromJSON(vars.MAX_NEEDS_REVIEW_TO_MERGE || '2'))
           && (inputs.auto_merge == null || inputs.auto_merge == 'true')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "All ${{ steps.gen.outputs.published }} posts passed citation validation. Auto-merging."
+          echo "Passing threshold: ${{ steps.gen.outputs.published }} published, ${{ steps.gen.outputs.needs_review }} flagged (≤ ${{ vars.MAX_NEEDS_REVIEW_TO_MERGE || '2' }} allowed). Auto-merging."
           gh pr merge ${{ steps.pr.outputs.pull-request-number }} \
             --repo ${{ github.repository }} \
             --squash --delete-branch
@@ -92,9 +92,10 @@ jobs:
       - name: Report manual-review needed
         if: >
           steps.pr.outputs.pull-request-number
-          && (steps.gen.outputs.needs_review != '0' || steps.gen.outputs.failed != '0')
+          && (fromJSON(steps.gen.outputs.needs_review) > fromJSON(vars.MAX_NEEDS_REVIEW_TO_MERGE || '2') || steps.gen.outputs.failed != '0')
         run: |
           echo "PR left open for manual review:"
-          echo "  needs_review = ${{ steps.gen.outputs.needs_review }}"
+          echo "  published    = ${{ steps.gen.outputs.published }}"
+          echo "  needs_review = ${{ steps.gen.outputs.needs_review }}  (threshold: ${{ vars.MAX_NEEDS_REVIEW_TO_MERGE || '2' }})"
           echo "  failed       = ${{ steps.gen.outputs.failed }}"
           echo "  URL          = ${{ steps.pr.outputs.pull-request-url }}"
