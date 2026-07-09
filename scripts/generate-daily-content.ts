@@ -146,11 +146,15 @@ function findUnverifiedAttributions(mdx: string): string[] {
     let m: RegExpExecArray | null;
     while ((m = re.exec(mdx))) {
       const attributionStart = m.index;
-      // Look forward 350 chars for a citation OR sunnah/quran link.
-      const windowEnd = Math.min(mdx.length, attributionStart + 350);
+      // Look forward 500 chars for a citation, verbatim Arabic block, or a
+      // sunnah.com / quran.com link. An <Arabic> block IS a citation: it can
+      // only be produced from verbatim source text per the system prompt, so
+      // "Allah declares X: <Arabic>…</Arabic>" is a valid attribution shape.
+      const windowEnd = Math.min(mdx.length, attributionStart + 500);
       const windowStr = mdx.slice(attributionStart, windowEnd);
       const hasCitation =
         /<Citation\b/.test(windowStr) ||
+        /<Arabic\b/.test(windowStr) ||
         /https?:\/\/sunnah\.com\//.test(windowStr) ||
         /https?:\/\/quran\.com\//.test(windowStr);
 
