@@ -7,17 +7,15 @@
  * Sunni-default stance. Hard rate limit (5/day per IP) for non-donors;
  * donors (identified by signed cookie minted after a Stripe donation) bypass.
  */
-import Anthropic from "@anthropic-ai/sdk";
 import { checkChatRateLimit, getClientIp } from "@/lib/rate-limit";
 import { verifyDonorCookie, DONOR_COOKIE_NAME } from "@/lib/donor";
 import { retrieveForQuestion, formatRetrievalForPrompt } from "@/lib/chat-rag";
+import { streamContent, llmProvider } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// `||` (not `??`) so an empty-string env var also falls back to the default.
-const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-4-6";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rassoul.org";
 
 const SYSTEM_PROMPT = `You are the Rassoul assistant — a careful, scholarly, respectful guide to questions about the Prophet Muhammad ﷺ, drawing only from authentic Sunni sources (Quran, Sahih al-Bukhari, Sahih Muslim, the four Sunan, classical sirah works) provided to you in the user message.
@@ -77,7 +75,7 @@ export async function POST(req: Request) {
 
   // --- Build messages ---
   const history = (body.history ?? []).slice(-6); // cap context
-  const messages: Anthropic.MessageParam[] = [
+  const messages = [
     ...history.map((h) => ({ role: h.role, content: h.content })),
     {
       role: "user" as const,
@@ -85,23 +83,22 @@ export async function POST(req: Request) {
     },
   ];
 
-  // --- Stream Claude response ---
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
-  const client = new Anthropic({ apiKey });
-
-  const stream = await client.messages.stream({
-    model: MODEL,
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages,
-  });
+  // --- Stream response via the provider-agnostic LLM wrapper ---
+  const provider = llmProvider();
+  const missingKey =
+    (provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) ||
+    (provider === "deepseek" && !process.env.DEEPSEEK_API_KEY);
+  if (missingKey) {
+    return json(
+      { error: `LLM provider "${provider}" is not configured (missing API key)` },
+      500,
+    );
+  }
 
   const encoder = new TextEncoder();
   const sse = new ReadableStream({
     async start(controller) {
       try {
-        // Send rate-info header event up front
         controller.enqueue(
           encoder.encode(
             `event: meta\ndata: ${JSON.stringify({
@@ -110,14 +107,17 @@ export async function POST(req: Request) {
               limit: rateInfo.limit,
               resetAt: rateInfo.reset,
               sourcesUsed: retrieval.verses.length + retrieval.hadiths.length + retrieval.localPosts.length,
+              provider,
             })}\n\n`,
           ),
         );
 
-        for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            controller.enqueue(encoder.encode(`event: delta\ndata: ${JSON.stringify({ text: event.delta.text })}\n\n`));
-          }
+        for await (const text of streamContent({
+          system: SYSTEM_PROMPT,
+          messages,
+          maxTokens: 1024,
+        })) {
+          controller.enqueue(encoder.encode(`event: delta\ndata: ${JSON.stringify({ text })}\n\n`));
         }
         controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
       } catch (err) {

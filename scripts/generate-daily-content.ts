@@ -20,7 +20,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
-import Anthropic from "@anthropic-ai/sdk";
 import {
   searchQuran,
   searchSunnah,
@@ -29,13 +28,12 @@ import {
   type Hadith,
 } from "../lib/sources";
 import { CLUSTERS } from "../lib/posts";
+import { generateContent, defaultModel, llmProvider } from "../lib/llm";
 
 const ROOT = path.resolve(__dirname, "..");
 const TOPICS_CSV = path.join(ROOT, "content", "topics.csv");
 const POSTS_DIR = path.join(ROOT, "content", "posts");
 const DRY_RUN = process.argv.includes("--dry-run");
-// `||` (not `??`) so an empty-string env var also falls back to the default.
-const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-opus-4-7";
 
 // Some clusters may be empty; also lets the user limit which clusters run today
 // via CLUSTERS_TODAY=duas,sirah,hadith (comma-separated slugs). Empty → all.
@@ -191,7 +189,6 @@ function findCitedReferences(mdx: string): string[] {
 
 async function generateOnePost(
   topic: Topic,
-  client: Anthropic,
 ): Promise<{ mdx: string; valid: boolean; notes: string[] }> {
   const [verses, hadiths] = await Promise.all([
     searchQuran(topic.keyword, 5).catch(() => []),
@@ -208,18 +205,11 @@ ${sourcesBlock}
 
 Write the MDX body now, following every rule in the system message. Begin immediately with the answer paragraph.`;
 
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
+  const mdx = await generateContent({
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }],
+    maxTokens: 4096,
   });
-
-  const mdx = resp.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
 
   const allowed = buildAllowedReferences(verses, hadiths);
   const cited = findCitedReferences(mdx);
@@ -273,11 +263,19 @@ function frontmatter(topic: Topic, notes: string[]): string {
 }
 
 async function main() {
-  if (!process.env.ANTHROPIC_API_KEY && !DRY_RUN) {
-    throw new Error("ANTHROPIC_API_KEY is required. Run with --dry-run to validate the pipeline only.");
+  const provider = llmProvider();
+  const model = defaultModel();
+  console.log(`LLM: ${provider} · ${model}`);
+
+  if (!DRY_RUN) {
+    if (provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic. Use --dry-run to validate the pipeline only.");
+    }
+    if (provider === "deepseek" && !process.env.DEEPSEEK_API_KEY) {
+      throw new Error("DEEPSEEK_API_KEY is required when LLM_PROVIDER=deepseek. Use --dry-run to validate the pipeline only.");
+    }
   }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "dry-run" });
   const topics = await readTopics();
   const { picks, skipped } = pickDailyBatch(topics);
 
@@ -313,7 +311,7 @@ async function main() {
   for (const topic of picks) {
     console.log(`\n→ [${topic.cluster}] ${topic.title}`);
     try {
-      const { mdx, valid, notes } = await generateOnePost(topic, client);
+      const { mdx, valid, notes } = await generateOnePost(topic);
       const outDir = path.join(POSTS_DIR, topic.cluster);
       await fs.mkdir(outDir, { recursive: true });
       const outPath = path.join(outDir, `${topic.slug}.mdx`);

@@ -61,8 +61,19 @@ services:
       #   scope: RUN_TIME
       #   value: "5"
 
+      # ---- LLM provider ----
+      # Set to "deepseek" to route both generator and chatbot through
+      # DeepSeek (~60x cheaper). Set to "anthropic" to use Claude.
+      - key: LLM_PROVIDER
+        scope: RUN_AND_BUILD_TIME
+        value: anthropic
+
       # ---- secrets: set the actual values in the App Platform UI ----
+      # Only ONE of the two provider keys must be set — the one matching LLM_PROVIDER.
       - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DEEPSEEK_API_KEY
         scope: RUN_TIME
         type: SECRET
       - key: SUNNAH_API_KEY
