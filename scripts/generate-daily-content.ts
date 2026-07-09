@@ -144,17 +144,21 @@ function findUnverifiedAttributions(mdx: string): string[] {
     let m: RegExpExecArray | null;
     while ((m = re.exec(mdx))) {
       const attributionStart = m.index;
-      // Look forward 500 chars for a citation, verbatim Arabic block, or a
-      // sunnah.com / quran.com link. An <Arabic> block IS a citation: it can
-      // only be produced from verbatim source text per the system prompt, so
-      // "Allah declares X: <Arabic>…</Arabic>" is a valid attribution shape.
+      // Look forward 500 chars for any recognized citation anchor:
+      //   - <Citation> tag                                    (Anthropic-shape)
+      //   - <Arabic> block (verbatim primary-source text)
+      //   - sunnah.com / quran.com URL (in a markdown link)
+      //   - Parenthetical source, e.g. "(Sahih al-Bukhari)",
+      //     "(Bukhari 3641)", "(Muslim)", "(Quran 55:1)",
+      //     "(Surah Al-Fatiha 1)"                             (DeepSeek-shape)
       const windowEnd = Math.min(mdx.length, attributionStart + 500);
       const windowStr = mdx.slice(attributionStart, windowEnd);
       const hasCitation =
         /<Citation\b/.test(windowStr) ||
         /<Arabic\b/.test(windowStr) ||
         /https?:\/\/sunnah\.com\//.test(windowStr) ||
-        /https?:\/\/quran\.com\//.test(windowStr);
+        /https?:\/\/quran\.com\//.test(windowStr) ||
+        /\([^)]*(?:sahih[\s-]+(?:al[\s-]+)?bukhari|sahih[\s-]+muslim|(?:^|[^a-z])bukhari|(?:^|[^a-z])muslim|tirmidhi|abu[\s-]+dawu(?:d|d)|nasa[\s']?i|nasai|ibn[\s-]+majah|sunan|musnad|muwatta|ahmad|quran|qur['’]?an|surah?|ayah?|(?:^|[^a-z])q\s*\d+:\d+)[^)]*\)/i.test(windowStr);
 
       if (!hasCitation) {
         // Extract a readable snippet: 20 chars before → 100 chars after
