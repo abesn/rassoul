@@ -236,10 +236,12 @@ Write the MDX body now, following every rule in the system message. Begin immedi
     }
   }
 
-  if (cited.length === 0 && (verses.length > 0 || hadiths.length > 0)) {
-    notes.push("Post has no citations despite available primary sources.");
-    valid = false;
-  }
+  // (Removed: the old "no citations despite sources" check was too aggressive.
+  //  It fired on legitimate meta articles — e.g. an encyclopedic "Define Hadith"
+  //  post that uses <Arabic> blocks for terminology without quoting a specific
+  //  hadith. The attribution guard below is the real fabrication defense; if a
+  //  post says "the Prophet said X" without a source, that IS caught. A post
+  //  that never attributes anything shouldn't be flagged.)
 
   // 2) Attribution guard: "the Prophet said" and similar must be accompanied
   //    by a nearby <Citation> tag or sunnah.com / quran.com link. Anything
