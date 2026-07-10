@@ -11,7 +11,7 @@ on:
         required: false
         default: ""
       auto_merge:
-        description: "Auto-merge if all posts pass citation validation"
+        description: "Auto-merge if all posts pass validation and site builds"
         required: false
         default: "true"
 
@@ -22,7 +22,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +45,17 @@ jobs:
           DEEPSEEK_MODEL: deepseek-chat
         run: npm run generate:daily
 
+      # Compile the site with today's newly-generated MDX. If ANY page fails
+      # to prerender (bad JSX, unquoted <Arabic>, autolink pitfall, etc.),
+      # this step exits non-zero. `continue-on-error` lets the workflow move
+      # on so we still open a PR (so you can see what was generated), but
+      # the auto-merge condition below checks `outcome == 'success'` and
+      # holds the PR when the build failed.
+      - name: Verify site builds with new MDX
+        id: build_check
+        continue-on-error: true
+        run: npm run build
+
       - name: Open PR with generated content
         id: pr
         uses: peter-evans/create-pull-request@v6
@@ -61,14 +72,21 @@ jobs:
             - Needs review (unverified citations): ${{ steps.gen.outputs.needs_review || '0' }}
             - Failed (API errors): ${{ steps.gen.outputs.failed || '0' }}
             - Clusters skipped (no pending topics): ${{ steps.gen.outputs.skipped || '0' }}
+            - Site build check: **${{ steps.build_check.outcome }}**
 
-            **Auto-merge policy:** this PR auto-merges when `needs_review = 0` AND `failed = 0`.
-            Any non-zero count above keeps this PR open for manual review.
+            **Auto-merge policy:** this PR auto-merges when all of these are true:
+            - `needs_review` ≤ `MAX_NEEDS_REVIEW_TO_MERGE` (default 2)
+            - `failed = 0`
+            - `next build` succeeds against the generated content
+
+            If any condition fails the PR is held for manual review.
 
             **If open for review, checklist:**
             - [ ] Skim each new MDX file for accuracy and tone
             - [ ] Verify all `<Citation>` links resolve to the right source
             - [ ] Check `topics.csv` for rows now marked `needs_review`
+            - [ ] If the build check failed, look at the run log for the specific
+                  file that broke and either delete it or fix the MDX
             - [ ] Merge if everything checks out
           delete-branch: true
           add-paths: |
@@ -80,11 +98,17 @@ jobs:
           steps.pr.outputs.pull-request-number
           && steps.gen.outputs.failed == '0'
           && (fromJSON(steps.gen.outputs.needs_review) <= fromJSON(vars.MAX_NEEDS_REVIEW_TO_MERGE || '2'))
+          && steps.build_check.outcome == 'success'
           && (inputs.auto_merge == null || inputs.auto_merge == 'true')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Passing threshold: ${{ steps.gen.outputs.published }} published, ${{ steps.gen.outputs.needs_review }} flagged (≤ ${{ vars.MAX_NEEDS_REVIEW_TO_MERGE || '2' }} allowed). Auto-merging."
+          echo "All gates passed:"
+          echo "  published    = ${{ steps.gen.outputs.published }}"
+          echo "  needs_review = ${{ steps.gen.outputs.needs_review }}  (threshold: ${{ vars.MAX_NEEDS_REVIEW_TO_MERGE || '2' }})"
+          echo "  failed       = 0"
+          echo "  build_check  = success"
+          echo "Auto-merging PR ${{ steps.pr.outputs.pull-request-number }}."
           gh pr merge ${{ steps.pr.outputs.pull-request-number }} \
             --repo ${{ github.repository }} \
             --squash --delete-branch
@@ -92,10 +116,15 @@ jobs:
       - name: Report manual-review needed
         if: >
           steps.pr.outputs.pull-request-number
-          && (fromJSON(steps.gen.outputs.needs_review) > fromJSON(vars.MAX_NEEDS_REVIEW_TO_MERGE || '2') || steps.gen.outputs.failed != '0')
+          && (
+            fromJSON(steps.gen.outputs.needs_review) > fromJSON(vars.MAX_NEEDS_REVIEW_TO_MERGE || '2')
+            || steps.gen.outputs.failed != '0'
+            || steps.build_check.outcome != 'success'
+          )
         run: |
           echo "PR left open for manual review:"
           echo "  published    = ${{ steps.gen.outputs.published }}"
           echo "  needs_review = ${{ steps.gen.outputs.needs_review }}  (threshold: ${{ vars.MAX_NEEDS_REVIEW_TO_MERGE || '2' }})"
           echo "  failed       = ${{ steps.gen.outputs.failed }}"
+          echo "  build_check  = ${{ steps.build_check.outcome }}"
           echo "  URL          = ${{ steps.pr.outputs.pull-request-url }}"
