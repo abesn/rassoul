@@ -176,6 +176,67 @@ function findUnverifiedAttributions(mdx: string): string[] {
   return problems;
 }
 
+/**
+ * Auto-fix a common LLM MDX bug: emitting `<Arabic>{unquoted-arabic}</Arabic>`
+ * where the braces contain raw non-JS text. MDX parses `{...}` as a JavaScript
+ * expression, so Arabic (or any non-JS text) inside bare braces fails to
+ * compile. We wrap the content as a proper string literal.
+ *
+ * `<Arabic>{وَٱذْكُرْنَ}</Arabic>` → `<Arabic>{"وَٱذْكُرْنَ"}</Arabic>`
+ *
+ * Content that's already properly quoted (or a template literal) is left alone.
+ */
+function fixArabicBlocks(mdx: string): { fixed: string; count: number } {
+  let count = 0;
+  const fixed = mdx.replace(/<Arabic>\{([^}]+)\}<\/Arabic>/g, (whole, raw) => {
+    const trimmed = raw.trim();
+    const isQuoted =
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+      (trimmed.startsWith("`") && trimmed.endsWith("`"));
+    if (isQuoted) return whole;
+    count++;
+    const safe = trimmed.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return `<Arabic>{"${safe}"}</Arabic>`;
+  });
+  return { fixed, count };
+}
+
+/**
+ * Cheap syntactic sanity check for the MDX we're about to write.
+ * Not a full MDX parse — that's expensive and requires the full toolchain —
+ * but catches the specific patterns we've seen LLMs produce that fail
+ * downstream in next-mdx-remote. Returns [] when the MDX looks safe.
+ */
+function findMdxSyntaxIssues(mdx: string): string[] {
+  const issues: string[] = [];
+
+  // 1. `<Arabic>{...}</Arabic>` where the contents are not a string literal.
+  //    (Should already be auto-fixed above, but double-check.)
+  const badArabic = /<Arabic>\{([^}]+)\}<\/Arabic>/g;
+  let m: RegExpExecArray | null;
+  while ((m = badArabic.exec(mdx))) {
+    const inner = m[1].trim();
+    const looksLikeString =
+      (inner.startsWith('"') && inner.endsWith('"')) ||
+      (inner.startsWith("'") && inner.endsWith("'")) ||
+      (inner.startsWith("`") && inner.endsWith("`"));
+    if (!looksLikeString) {
+      issues.push(`Unquoted <Arabic> block: "${inner.slice(0, 60)}…"`);
+    }
+  }
+
+  // 2. Stray unclosed `<Arabic>` or `<Citation>` tags — a heuristic for
+  //    unbalanced JSX that will crash the MDX compiler.
+  const arabicOpen = (mdx.match(/<Arabic\b/g) || []).length;
+  const arabicClose = (mdx.match(/<\/Arabic>/g) || []).length;
+  if (arabicOpen !== arabicClose) {
+    issues.push(`Unbalanced <Arabic> tags: ${arabicOpen} opens vs ${arabicClose} closes`);
+  }
+
+  return issues;
+}
+
 function findCitedReferences(mdx: string): string[] {
   const re = /<Citation\s+([^/]*?)\/>/g;
   const out: string[] = [];
@@ -209,11 +270,14 @@ ${sourcesBlock}
 
 Write the MDX body now, following every rule in the system message. Begin immediately with the answer paragraph.`;
 
-  const mdx = await generateContent({
+  const rawMdx = await generateContent({
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 4096,
   });
+
+  // Auto-fix a common LLM MDX bug (unquoted <Arabic> content) BEFORE validation.
+  const { fixed: mdx, count: autofixCount } = fixArabicBlocks(rawMdx);
 
   const allowed = buildAllowedReferences(verses, hadiths);
   const cited = findCitedReferences(mdx);
@@ -244,6 +308,20 @@ Write the MDX body now, following every rule in the system message. Begin immedi
   if (attributionProblems.length) {
     valid = false;
     for (const p of attributionProblems) notes.push(p);
+  }
+
+  // 3) MDX syntax sanity check. Any post that would fail the Next.js build is
+  //    treated as needs_review — auto-merge stays off until a human eyeballs it.
+  //    (Merging a syntactically broken post would take the whole site down.)
+  const syntaxIssues = findMdxSyntaxIssues(mdx);
+  if (syntaxIssues.length) {
+    valid = false;
+    for (const s of syntaxIssues) notes.push(`MDX syntax: ${s}`);
+  }
+
+  // Note when we auto-fixed something so it shows up in the summary log.
+  if (autofixCount > 0) {
+    notes.push(`Auto-fixed ${autofixCount} unquoted <Arabic> block(s).`);
   }
 
   return { mdx, valid, notes };
