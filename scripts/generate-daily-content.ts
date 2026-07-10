@@ -188,7 +188,10 @@ function findUnverifiedAttributions(mdx: string): string[] {
  */
 function fixArabicBlocks(mdx: string): { fixed: string; count: number } {
   let count = 0;
-  const fixed = mdx.replace(/<Arabic>\{([^}]+)\}<\/Arabic>/g, (whole, raw) => {
+  // Match `<Arabic>{...}</Arabic>` across newlines (whitespace between tag and
+  // brace, non-greedy body). Handles both single-line and multi-line blocks.
+  const braced = /<Arabic>\s*\{([\s\S]+?)\}\s*<\/Arabic>/g;
+  let fixed = mdx.replace(braced, (whole, raw) => {
     const trimmed = raw.trim();
     const isQuoted =
       (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
@@ -198,6 +201,23 @@ function fixArabicBlocks(mdx: string): { fixed: string; count: number } {
     count++;
     const safe = trimmed.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     return `<Arabic>{"${safe}"}</Arabic>`;
+  });
+  return { fixed, count };
+}
+
+/**
+ * MDX-safe autolink normalisation.
+ *
+ * Plain markdown allows `<https://example.com>` as an autolink, but MDX
+ * interprets `<` as the start of a JSX tag. Since URLs contain `/`, MDX
+ * throws "Unexpected character `/` before local name". Strip the angle
+ * brackets — the URL alone still auto-links in markdown.
+ */
+function fixMdxAutolinks(mdx: string): { fixed: string; count: number } {
+  let count = 0;
+  const fixed = mdx.replace(/<(https?:\/\/[^>\s]+)>/g, (_, url) => {
+    count++;
+    return url;
   });
   return { fixed, count };
 }
@@ -276,8 +296,13 @@ Write the MDX body now, following every rule in the system message. Begin immedi
     maxTokens: 4096,
   });
 
-  // Auto-fix a common LLM MDX bug (unquoted <Arabic> content) BEFORE validation.
-  const { fixed: mdx, count: autofixCount } = fixArabicBlocks(rawMdx);
+  // Auto-fix common LLM MDX bugs BEFORE validation:
+  //   1. <Arabic>{unquoted}</Arabic> → <Arabic>{"quoted"}</Arabic>
+  //   2. <https://url> autolinks (invalid JSX) → plain URL
+  const arabicFix = fixArabicBlocks(rawMdx);
+  const autolinkFix = fixMdxAutolinks(arabicFix.fixed);
+  const mdx = autolinkFix.fixed;
+  const autofixCount = arabicFix.count + autolinkFix.count;
 
   const allowed = buildAllowedReferences(verses, hadiths);
   const cited = findCitedReferences(mdx);
