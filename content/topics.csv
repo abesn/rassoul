@@ -1,19 +1,19 @@
 slug,title,cluster,keyword,search_volume,keyword_difficulty,cpc,priority_score,intent,status,published_at,url
 what-does-rassoul-mean-the-arabic-root-r-s-l-explained,What Does 'Rassoul' Mean? The Arabic Root R-S-L Explained,sirah,rassoul,90,1,1.34,999999,informational,needs_review,2026-07-07T17:08:06.878Z,/sirah/what-does-rassoul-mean-the-arabic-root-r-s-l-explained
 rasul-rasool-rassoul-one-word-many-spellings,"Rasul, Rasool, Rassoul: One Word, Many Spellings",sirah,rasool,0,1,1.34,999999,informational,published,2026-07-09T20:16:02.576Z,/sirah/rasul-rasool-rassoul-one-word-many-spellings
-rasul-allah-the-messenger-of-allah,Rasul Allah: The Messenger of Allah ﷺ,sirah,rasul allah,0,1,1.34,999999,informational,pending,,
+rasul-allah-the-messenger-of-allah,Rasul Allah: The Messenger of Allah ﷺ,sirah,rasul allah,0,1,1.34,999999,informational,published,2026-07-10T09:28:10.481Z,/sirah/rasul-allah-the-messenger-of-allah
 the-difference-between-nabi-and-rasul-in-islam,The Difference Between Nabi and Rasul in Islam,sirah,nabi vs rasul,0,1,1.34,999999,informational,pending,,
 how-many-messengers-rusul-did-allah-send,How Many Messengers (Rusul) Did Allah Send?,sirah,how many messengers in islam,0,1,1.34,999999,informational,pending,,
 ramadan-2026,Ramadan 2026,ramadan,ramadan 2026,368000,25,1.74,1226666,informational,needs_review,2026-07-07T17:13:10.669Z,/ramadan/ramadan-2026
 month-ramadan,Month Ramadan,ramadan,month ramadan,246000,47,1.38,473076,informational,published,2026-07-09T20:17:52.309Z,/ramadan/month-ramadan
 surah-waqiah-meaning-benefits-full-recitation,"Surah Waqiah: Meaning, Benefits & Full Recitation",quran,surah waqiah,33100,2,4.07,472857,informational,needs_review,2026-07-07T17:11:24.898Z,/quran/surah-waqiah-meaning-benefits-full-recitation
-2025-ramadan,2025 Ramadan,ramadan,2025 ramadan,40500,4,4.36,450000,informational,pending,,
+2025-ramadan,2025 Ramadan,ramadan,2025 ramadan,40500,4,4.36,450000,informational,published,2026-07-10T09:30:00.313Z,/ramadan/2025-ramadan
 ramadan,Ramadan,ramadan,ramadan,246000,51,1.38,439285,informational,pending,,
 surah-rahman-meaning-benefits-full-recitation,"Surah Rahman: Meaning, Benefits & Full Recitation",quran,surah rahman,33100,3,9.4,413750,informational,published,2026-07-09T20:17:17.011Z,/quran/surah-rahman-meaning-benefits-full-recitation
 ramadan-mubarak-ramadan,Ramadan Mubarak Ramadan,ramadan,ramadan mubarak ramadan,40500,6,0.12,368181,informational,pending,,
 ramadan-eid,Ramadan & Eid,ramadan,ramadan & eid,90500,20,0.47,362000,informational,pending,,
 eid-ramadan,Eid Ramadan,ramadan,eid ramadan,90500,21,0.47,348076,informational,pending,,
-surah-baqarah-meaning-benefits-full-recitation,"Surah Baqarah: Meaning, Benefits & Full Recitation",quran,last 2 ayats of surah baqarah,22200,2,,317142,informational,pending,,
+surah-baqarah-meaning-benefits-full-recitation,"Surah Baqarah: Meaning, Benefits & Full Recitation",quran,last 2 ayats of surah baqarah,22200,2,,317142,informational,published,2026-07-10T09:29:19.199Z,/quran/surah-baqarah-meaning-benefits-full-recitation
 surah-mulk-meaning-benefits-full-recitation,"Surah Mulk: Meaning, Benefits & Full Recitation",quran,surah mulk,74000,20,15.45,296000,informational,pending,,
 eid-hajj,Eid Hajj,hajj,eid hajj,110000,33,3.31,289473,informational,needs_review,2026-07-07T17:13:57.223Z,/hajj/eid-hajj
 when-is-ramadan-2026-date-fasting-times-what-to-expect,"When Is Ramadan 2026? Date, Fasting Times & What to Expect",ramadan,when i ramadan,90500,28,1.33,274242,informational,pending,,
@@ -30,7 +30,7 @@ surat-yasin-surah,Surat Yasin Surah,quran,surat yasin surah,49500,23,5.88,176785
 surah-surah-meaning-benefits-full-recitation,"Surah Surah: Meaning, Benefits & Full Recitation",quran,surah surah kahf,33100,14,6.76,174210,informational,pending,,
 surah-nas-meaning-benefits-full-recitation,"Surah Nas: Meaning, Benefits & Full Recitation",quran,surah nas,14800,4,,164444,informational,pending,,
 hajj-of-islam,Hajj of Islam,hajj,hajj of islam,40500,20,5.49,162000,informational,published,2026-07-09T20:18:12.416Z,/hajj/hajj-of-islam
-islamic-hajj,Islamic Hajj,hajj,islamic hajj,40500,22,5.35,150000,informational,pending,,
+islamic-hajj,Islamic Hajj,hajj,islamic hajj,40500,22,5.35,150000,informational,published,2026-07-10T09:30:19.837Z,/hajj/islamic-hajj
 al-duha-surah,Al-duha Surah,quran,al-duha surah,14800,5,,148000,informational,pending,,
 surah-falaq-meaning-benefits-full-recitation,"Surah Falaq: Meaning, Benefits & Full Recitation",quran,surah falaq,14800,5,0.03,148000,informational,pending,,
 hajj-pilgrimage-to-mecca,Hajj Pilgrimage to Mecca,hajj,hajj pilgrimage to mecca,40500,25,5.35,135000,informational,pending,,
@@ -40,7 +40,7 @@ hajj-hajj,Hajj Hajj,hajj,hajj hajj,40500,31,5.49,112500,informational,pending,,
 muslim-pilgrimage-hajj,Muslim Pilgrimage Hajj,hajj,muslim pilgrimage hajj,40500,31,5.35,112500,informational,pending,,
 wal-fajr-surah,Wal Fajr Surah,quran,wal fajr surah,12100,7,0.11,100833,informational,pending,,
 surah-fajr-meaning-benefits-full-recitation,"Surah Fajr: Meaning, Benefits & Full Recitation",quran,surah fajr,12100,7,0.11,100833,informational,pending,,
-dua-mass,Dua Mass,duas,dua mass,14800,10,3.78,98666,informational,pending,,
+dua-mass,Dua Mass,duas,dua mass,14800,10,3.78,98666,informational,published,2026-07-10T09:27:49.676Z,/duas/dua-mass
 dua-qunoot-dua-qunoot,Dua Qunoot Dua Qunoot,duas,dua qunoot dua qunoot,27100,,0.01,90333,informational,pending,,
 dua-fragrances,Dua Fragrances,duas,dua fragrances,27100,,0.34,90333,informational,pending,,
 dua-perfumes,Dua Perfumes,duas,dua perfumes,27100,,0.34,90333,informational,pending,,
@@ -54,7 +54,7 @@ hadith,Hadith,hadith,hadith,18100,32,4.09,48918,informational,needs_review,2026-
 salat-al-sunnah,Salat Al Sunnah,sunnah,salat al sunnah,2900,1,,48333,informational,needs_review,2026-07-09T20:17:36.246Z,/sunnah/salat-al-sunnah
 break-the-fast-dua,Break the Fast Dua,duas,break the fast dua,12100,,0.79,40333,informational,pending,,
 forgiveness-dua,Forgiveness Dua,duas,forgiveness dua,5400,9,2.46,38571,informational,pending,,
-sunnah,Sunnah,sunnah,sunnah,9900,26,6.46,31935,informational,pending,,
+sunnah,Sunnah,sunnah,sunnah,9900,26,6.46,31935,informational,needs_review,2026-07-10T09:29:39.700Z,/sunnah/sunnah
 dua-brand,Dua Brand,duas,dua brand,8100,,0.38,27000,informational,pending,,
 exams-dua,Exams Dua,duas,exams dua,8100,,,27000,informational,pending,,
 define-hadith,Define Hadith,hadith,define hadith,4400,12,,25882,informational,published,2026-07-09T20:16:15.268Z,/hadith/define-hadith
@@ -63,7 +63,7 @@ nusa-nusa-dua,Nusa Nusa Dua,duas,nusa nusa dua,3600,10,2.77,24000,informational,
 dua-of-islam,Dua of Islam,duas,dua of islam,2900,8,3.48,22307,informational,pending,,
 dua-to-breakfast,Dua to Breakfast,duas,dua to breakfast,6600,,,22000,informational,pending,,
 dua-to-fast,Dua to Fast,duas,dua to fast,6600,,15.84,22000,informational,pending,,
-hadith-definition,Hadith Definition,hadith,hadith definition,4400,15,,22000,informational,pending,,
+hadith-definition,Hadith Definition,hadith,hadith definition,4400,15,,22000,informational,published,2026-07-10T09:28:26.763Z,/hadith/hadith-definition
 40-hadith-an-nawawi,40 Hadith an Nawawi,hadith,40 hadith an nawawi,1300,1,0.37,21666,informational,pending,,
 hadith-meaning,Hadith Meaning,hadith,hadith meaning,4400,16,,20952,informational,pending,,
 masjid-as-sunnah,Masjid As Sunnah,sunnah,masjid as sunnah,2900,11,13.14,18125,informational,pending,,
@@ -184,7 +184,7 @@ ramadan-schedule-for-students,Ramadan Schedule for Students,ramadan,ramadan sche
 ramadan-and-mental-health,Ramadan and Mental Health,ramadan,ramadan and mental health,500,8,1.0,2500,informational,pending,,
 what-is-dawah-in-islam,What is Dawah in Islam,dawah,what is dawah in islam,500,8,25.0,2500,informational,needs_review,2026-07-07T17:14:45.497Z,/dawah/what-is-dawah-in-islam
 the-wisdom-of-gradualism-in-dawah,The Wisdom of Gradualism in Dawah,dawah,the wisdom of gradualism in dawah,500,8,25.0,2500,informational,published,2026-07-09T20:18:31.253Z,/dawah/the-wisdom-of-gradualism-in-dawah
-quranic-principles-of-dawah-16-125,Quranic Principles of Dawah (16:125),dawah,quranic principles of dawah (16:125),500,8,25.0,2500,informational,pending,,
+quranic-principles-of-dawah-16-125,Quranic Principles of Dawah (16:125),dawah,quranic principles of dawah (16:125),500,8,25.0,2500,informational,published,2026-07-10T09:30:38.591Z,/dawah/quranic-principles-of-dawah-16-125
 dawah-methods-of-the-prophet-muhammad,Dawah Methods of the Prophet Muhammad,dawah,dawah methods of the prophet muhammad,500,8,25.0,2500,informational,pending,,
 the-story-of-khalid-ibn-al-walid-s-conversion,The Story of Khalid Ibn Al-walid's Conversion,dawah,the story of khalid ibn al-walid's conversion,500,8,25.0,2500,informational,pending,,
 the-story-of-umar-ibn-al-khattab-s-conversion,The Story of Umar Ibn Al-khattab's Conversion,dawah,the story of umar ibn al-khattab's conversion,500,8,25.0,2500,informational,pending,,
@@ -306,7 +306,7 @@ the-farewell-sermon-the-final-address-of-the-prophet,The Farewell Sermon: The Fi
 the-death-of-the-prophet-muhammad,The Death of the Prophet Muhammad ﷺ,sirah,death of prophet muhammad,200,10,0.5,1300,informational,pending,,
 ar-rahman-the-most-compassionate,Ar-Rahman: The Most Compassionate — Name 1 of Allah,names-of-allah,ar-rahman meaning,50,5,0.3,800,informational,needs_review,2026-07-07T17:09:44.782Z,/names-of-allah/ar-rahman-the-most-compassionate
 ar-rahim-the-most-merciful,Ar-Rahim: The Most Merciful — Name 2 of Allah,names-of-allah,ar-rahim meaning,50,5,0.3,800,informational,published,2026-07-09T20:16:39.280Z,/names-of-allah/ar-rahim-the-most-merciful
-al-malik-the-king,Al-Malik: The King — Name 3 of Allah,names-of-allah,al-malik meaning,50,5,0.3,800,informational,pending,,
+al-malik-the-king,Al-Malik: The King — Name 3 of Allah,names-of-allah,al-malik meaning,50,5,0.3,800,informational,published,2026-07-10T09:28:46.159Z,/names-of-allah/al-malik-the-king
 al-quddus-the-most-holy,Al-Quddus: The Most Holy — Name 4 of Allah,names-of-allah,al-quddus meaning,50,5,0.3,800,informational,pending,,
 as-salam-the-source-of-peace,As-Salam: The Source of Peace — Name 5 of Allah,names-of-allah,as-salam meaning,50,5,0.3,800,informational,pending,,
 al-mu-min-the-granter-of-security,Al-Mu'min: The Granter of Security — Name 6 of Allah,names-of-allah,al-mu'min meaning,50,5,0.3,800,informational,pending,,
@@ -405,7 +405,7 @@ ar-rashid-the-guide-to-the-right-path,Ar-Rashid: The Guide to the Right Path —
 as-sabur-the-patient,As-Sabur: The Patient — Name 99 of Allah,names-of-allah,as-sabur meaning,50,5,0.3,800,informational,pending,,
 muhammad-the-praised-one,Muhammad: The Praised One — Name 1 of the Messenger ﷺ,names-of-the-messenger,muhammad meaning prophet muhammad,50,5,0.3,750,informational,needs_review,2026-07-07T17:10:42.764Z,/names-of-the-messenger/muhammad-the-praised-one
 ahmad-the-most-praiseworthy,Ahmad: The Most Praiseworthy — Name 2 of the Messenger ﷺ,names-of-the-messenger,ahmad meaning prophet muhammad,50,5,0.3,750,informational,published,2026-07-09T20:17:01.599Z,/names-of-the-messenger/ahmad-the-most-praiseworthy
-al-mahi-the-effacer-of-disbelief,Al-Mahi: The Effacer of Disbelief — Name 3 of the Messenger ﷺ,names-of-the-messenger,al-mahi meaning prophet muhammad,50,5,0.3,750,informational,pending,,
+al-mahi-the-effacer-of-disbelief,Al-Mahi: The Effacer of Disbelief — Name 3 of the Messenger ﷺ,names-of-the-messenger,al-mahi meaning prophet muhammad,50,5,0.3,750,informational,needs_review,2026-07-10T09:29:00.156Z,/names-of-the-messenger/al-mahi-the-effacer-of-disbelief
 al-hashir-the-gatherer,Al-Hashir: The Gatherer — Name 4 of the Messenger ﷺ,names-of-the-messenger,al-hashir meaning prophet muhammad,50,5,0.3,750,informational,pending,,
 al-aqib-the-last-prophet,Al-Aqib: The Last Prophet — Name 5 of the Messenger ﷺ,names-of-the-messenger,al-aqib meaning prophet muhammad,50,5,0.3,750,informational,pending,,
 al-mustafa-the-chosen-one,Al-Mustafa: The Chosen One — Name 6 of the Messenger ﷺ,names-of-the-messenger,al-mustafa meaning prophet muhammad,50,5,0.3,750,informational,pending,,
