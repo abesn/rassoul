@@ -26,7 +26,7 @@ Duas · Sirah · Hadith · 99 Names of Allah · Names of the Messenger ﷺ · Qu
 ```bash
 npm install
 cp .env.example .env.local
-# Fill in ANTHROPIC_API_KEY (and SUNNAH_API_KEY if you have one)
+# Fill in DEEPSEEK_API_KEY (and SUNNAH_API_KEY if you have one)
 npm run dev
 ```
 
@@ -145,7 +145,7 @@ User Q  →  /api/chat
             │    - quran.com search (top 4 verses)
             │    - sunnah.com search (top 6 hadith)
             │    - local MDX corpus (top 3 posts)
-            ├─ Claude with strict citation system prompt
+            ├─ DeepSeek with strict citation system prompt
             └─ stream SSE response
 ```
 
@@ -153,7 +153,7 @@ User Q  →  /api/chat
 
 | Var | Source |
 |---|---|
-| `ANTHROPIC_API_KEY` | https://console.anthropic.com |
+| `DEEPSEEK_API_KEY` | https://platform.deepseek.com/api_keys |
 | `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | https://console.upstash.com (free) |
 | `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | https://dashboard.stripe.com |
 | `DONOR_COOKIE_SECRET` | `openssl rand -base64 48` |
@@ -220,7 +220,7 @@ doctl apps create --spec .do/app.yaml
 In the App Platform UI → Settings → App-Level Environment Variables, set the SECRET
 envs (they're declared in `app.yaml` without values):
 
-- `ANTHROPIC_API_KEY` — https://console.anthropic.com
+- `DEEPSEEK_API_KEY` — https://platform.deepseek.com/api_keys
 - `SUNNAH_API_KEY` — https://sunnah.com/developers (free)
 - `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` — https://console.upstash.com (free)
 - `DONOR_COOKIE_SECRET` — generate with `openssl rand -base64 48`

@@ -10,7 +10,7 @@
 import { checkChatRateLimit, getClientIp } from "@/lib/rate-limit";
 import { verifyDonorCookie, DONOR_COOKIE_NAME } from "@/lib/donor";
 import { retrieveForQuestion, formatRetrievalForPrompt } from "@/lib/chat-rag";
-import { streamContent, llmProvider } from "@/lib/llm";
+import { streamContent } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,16 +83,9 @@ export async function POST(req: Request) {
     },
   ];
 
-  // --- Stream response via the provider-agnostic LLM wrapper ---
-  const provider = llmProvider();
-  const missingKey =
-    (provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) ||
-    (provider === "deepseek" && !process.env.DEEPSEEK_API_KEY);
-  if (missingKey) {
-    return json(
-      { error: `LLM provider "${provider}" is not configured (missing API key)` },
-      500,
-    );
+  // --- Stream response via DeepSeek ---
+  if (!process.env.DEEPSEEK_API_KEY) {
+    return json({ error: "DEEPSEEK_API_KEY is not configured" }, 500);
   }
 
   const encoder = new TextEncoder();
@@ -107,7 +100,7 @@ export async function POST(req: Request) {
               limit: rateInfo.limit,
               resetAt: rateInfo.reset,
               sourcesUsed: retrieval.verses.length + retrieval.hadiths.length + retrieval.localPosts.length,
-              provider,
+              provider: "deepseek",
             })}\n\n`,
           ),
         );
