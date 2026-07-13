@@ -32,46 +32,41 @@ npm run dev
 
 Open <http://localhost:3000>.
 
-## Running the content generator manually
+## The daily content pipeline
 
-```bash
-# Dry-run: shows what would be picked + what sources are available, no API calls
-npm run generate:dry
+Daily content generation runs in **n8n**, not GitHub Actions. See
+[`n8n/README.md`](n8n/README.md) for setup, credentials, and workflow details.
 
-# Real run: writes up to 10 posts (one per cluster) to content/posts/**
-npm run generate:daily
-
-# Limit to specific clusters (comma-separated)
-CLUSTERS_TODAY=duas,sirah npm run generate:daily
-```
-
-After it runs, `topics.csv` rows for the picked posts flip from `pending` to either
-`published` or `needs_review`. Rows flagged `needs_review` had at least one citation
-that couldn't be matched against a fetched source — read those before merging.
-
-## The daily loop (in production)
-
-1. GitHub Action fires every day at 06:00 UTC (~02:00 ET, 23:00 PT prior day).
-2. It runs `npm run generate:daily` against `topics.csv`.
-3. It opens a PR titled `Daily da'wah content — <run_id>`.
-4. You review and merge (or close).
-5. DigitalOcean App Platform rebuilds automatically on merge to `main`.
-
-Manual trigger: Actions → "Daily content generation" → Run workflow.
+**In one paragraph:** every day at 06:00 UTC the n8n workflow fetches `content/topics.csv`,
+picks one highest-priority pending topic per cluster (10 clusters → 10 posts), searches
+sunnah.com + quran.com for primary sources, calls DeepSeek to write each post with strict
+citation rules, auto-fixes known MDX bugs, validates each post's citations and
+attributions, and commits the passing posts directly to `main` via the GitHub Contents
+API. Flagged posts are marked `needs_review` in `topics.csv` and skipped (not committed).
+DigitalOcean App Platform auto-deploys on the resulting commit. A Slack/Discord webhook
+notifies you of the day's summary.
 
 ### Cost expectations
 
-- 10 posts/day × ~$0.20 with Claude Opus 4.7 = **~$60/month API cost**
-- Or ~$20/month if you switch to Sonnet (`CLAUDE_MODEL=claude-sonnet-4-6` in the workflow)
-- ~450 topics in the backlog = ~45 days of runway before you need to top up `topics.csv`
-- Run `python3 tmp/build-topics.py` to regenerate the backlog with fresh keywords
+- **DeepSeek:** ~$0.003/post × 10/day × 30 = **~$1/month**.
+- **n8n:** whatever you already pay for your instance.
+- **Topics backlog:** ~450 rows in `content/topics.csv` = ~45 days of runway.
+  Regenerate with `python3 tmp/build-topics.py` when you're getting low.
 
-## Required secrets (GitHub repo settings → Secrets)
+### Required credentials (in n8n, not GitHub)
 
-- `ANTHROPIC_API_KEY` — for the generator.
-- `SUNNAH_API_KEY` — optional but recommended. Free at <https://sunnah.com/developers>.
+- GitHub personal access token with `contents: write` on `abesn/rassoul`
+- DeepSeek API key — https://platform.deepseek.com/api_keys
+- Sunnah.com API key — https://sunnah.com/developers (free, optional but recommended)
 
-`GITHUB_TOKEN` is provided automatically by Actions; no setup needed for the PR step.
+See [`n8n/README.md`](n8n/README.md) for step-by-step setup.
+
+### Reverting to the old GH Actions pipeline
+
+The old workflow (`.github/workflows/daily-content.yml`) and generator
+(`scripts/generate-daily-content.ts`) were removed in the commit that added n8n.
+`git log --all -- .github/workflows/daily-content.yml` will find the deletion; revert
+that commit to restore the Actions-based pipeline.
 
 ## Repo layout
 
@@ -88,10 +83,10 @@ content/
 lib/
   posts.ts              MDX loading + cluster metadata
   sources.ts            sunnah.com + quran.com clients with graceful fallback
-scripts/
-  generate-weekly-content.ts   The weekly loop
+n8n/
+  rassoul-daily-content.json   Workflow template — import into your n8n instance
+  README.md                    Setup + credential mapping
 .github/workflows/
-  weekly-content.yml    Mon 06:00 UTC cron → opens PR
   ci.yml                Build/typecheck on every push
 ```
 

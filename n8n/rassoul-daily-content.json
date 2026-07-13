@@ -1,0 +1,347 @@
+{
+  "name": "rassoul.org — daily da'wah content",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a01",
+      "name": "Daily 06:00 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{$env.RASSOUL_REPO}}/contents/content/topics.csv",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Accept", "value": "application/vnd.github.raw+json"}
+          ]
+        },
+        "options": {"response": {"response": {"responseFormat": "text"}}}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a02",
+      "name": "GET topics.csv",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 400],
+      "credentials": {
+        "httpHeaderAuth": {"id": "GITHUB_PAT", "name": "GitHub PAT"}
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ─────────────────────────────────────────────────────────────\n// Pick one topic per cluster (10 clusters) — highest priority_score,\n// status == 'pending'. Returns 10 items downstream.\n// ─────────────────────────────────────────────────────────────\nconst CLUSTERS = [\n  'duas','sirah','hadith','names-of-allah','names-of-the-messenger',\n  'quran','sunnah','ramadan','hajj','dawah'\n];\n\nconst csv = $input.first().json.data ?? $input.first().json.body ?? $input.first().json;\nconst text = typeof csv === 'string' ? csv : (csv.text ?? '');\n\n// Minimal CSV parser (handles quoted fields with commas)\nfunction parseCSV(str) {\n  const rows = [];\n  let row = [], field = '', inQuote = false;\n  for (let i = 0; i < str.length; i++) {\n    const c = str[i];\n    if (inQuote) {\n      if (c === '\"' && str[i+1] === '\"') { field += '\"'; i++; }\n      else if (c === '\"') { inQuote = false; }\n      else field += c;\n    } else if (c === '\"') inQuote = true;\n    else if (c === ',') { row.push(field); field = ''; }\n    else if (c === '\\n') { row.push(field); rows.push(row); row = []; field = ''; }\n    else if (c === '\\r') { /* skip */ }\n    else field += c;\n  }\n  if (field.length || row.length) { row.push(field); rows.push(row); }\n  return rows;\n}\n\nconst rows = parseCSV(text);\nconst header = rows.shift();\nconst topics = rows.filter(r => r.length === header.length).map(r => Object.fromEntries(header.map((h, i) => [h, r[i]])));\n\nconst picks = [];\nfor (const cluster of CLUSTERS) {\n  const candidates = topics\n    .filter(t => t.cluster === cluster && t.status === 'pending')\n    .sort((a, b) => Number(b.priority_score) - Number(a.priority_score));\n  if (candidates.length) picks.push(candidates[0]);\n}\n\nreturn picks.map(p => ({ json: { ...p, __allTopics: topics, __header: header } }));"
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a03",
+      "name": "Pick daily batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 400]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a04",
+      "name": "Loop topics",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [800, 400]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.quran.com/api/v4/search?q={{encodeURIComponent($json.keyword)}}&size=5&language=en",
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a05",
+      "name": "Search Quran",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Attach quran verses to the topic being processed\nconst topic = $('Loop topics').item.json;\nconst quran = $input.first().json.search?.results ?? [];\nconst verses = quran.map(r => {\n  const [surah, ayah] = r.verse_key.split(':').map(Number);\n  return {\n    surah, ayah,\n    arabic: r.text,\n    english: r.translations?.[0]?.text ?? '',\n    reference: `Quran ${surah}:${ayah}`,\n    url: `https://quran.com/${surah}/${ayah}`\n  };\n});\nreturn [{ json: { ...topic, __verses: verses } }];"
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a06",
+      "name": "Attach verses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.sunnah.com/v1/hadiths?q={{encodeURIComponent($json.keyword)}}&limit=8",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a07",
+      "name": "Search Sunnah",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 300],
+      "credentials": {
+        "httpHeaderAuth": {"id": "SUNNAH_API_KEY", "name": "Sunnah.com API Key"}
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Attach hadiths (graceful if sunnah.com is unavailable)\nconst topic = $('Attach verses').item.json;\nconst body = $input.first().json;\nconst raw = body?.data ?? [];\nconst hadiths = raw.map(h => ({\n  collection: h.collection,\n  hadithNumber: h.hadithNumber,\n  arabic: h.hadithArabic ?? '',\n  english: h.hadithEnglish ?? '',\n  reference: `${h.collection} ${h.hadithNumber}`,\n  url: `https://sunnah.com/${h.collection}:${h.hadithNumber}`\n}));\nreturn [{ json: { ...topic, __hadiths: hadiths } }];"
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a08",
+      "name": "Attach hadiths",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ─────────────────────────────────────────────────────────────\n// Build the LLM prompt (system + user message) for one topic.\n// ─────────────────────────────────────────────────────────────\nconst topic = $input.first().json;\nconst verses = topic.__verses ?? [];\nconst hadiths = topic.__hadiths ?? [];\n\nconst SYSTEM = `You are a meticulous Muslim writer producing a single da'wah blog post for rassoul.org.\n\nNon-negotiable rules:\n1. EVERY hadith you reference MUST come from the \"Verified hadiths\" list below. Cite it inline using <Citation source=\"...\" book=\"...\" number=\"...\" href=\"...\" />. Do NOT invent, paraphrase from memory, or attribute hadiths to sources not in the list.\n2. EVERY Quran verse you reference MUST come from the \"Verified Quran verses\" list. Cite it the same way.\n3. HARD RULE — attribution requires citation. You may NEVER write \"the Prophet said\", \"Allah says\", or any speech-attribution phrase UNLESS the same or next sentence contains a <Citation> tag OR a markdown link to sunnah.com / quran.com anchoring the claim. If the sources don't cover it, rephrase as your own analysis or leave it out.\n4. If you do not have enough verified sources to cover a section, omit that section. Quality over completeness.\n5. Use the Arabic component for any block of Arabic text: <Arabic>{\"النص العربي\"}</Arabic> — ALWAYS wrap Arabic in JSX string literal quotes.\n6. Voice: respectful, scholarly but accessible, never preachy, no exclamation marks, no emojis.\n7. When mentioning the Prophet Muhammad, use ﷺ after his name.\n8. Output ONLY a single MDX file body. NO frontmatter, NO leading commentary, NO closing notes.\n9. Structure: open with a 1–2 sentence answer to the search intent. Then 3–6 H2 sections. Close with a \"Sources\" H2 listing citations as plain markdown links (NOT <url> autolinks — use bare URLs or [text](url) form).\n10. Target length: 900–1600 words.\n11. NEVER use JSON-escaped attribute quotes like source=\\\\\"X\\\\\" — always plain source=\"X\".\n12. NEVER use the AI-detection phrases: \"in conclusion\", \"it is important to note\", \"delve into\", \"navigate the\", \"tapestry\", \"embark on a journey\".`;\n\nconst sourcesLines = [];\nif (verses.length) {\n  sourcesLines.push('## Verified Quran verses');\n  for (const v of verses) {\n    sourcesLines.push(`- ${v.reference} — ${v.url}`);\n    if (v.english) sourcesLines.push(`  English: \"${v.english.replace(/\\s+/g, ' ').trim()}\"`);\n  }\n}\nif (hadiths.length) {\n  sourcesLines.push('');\n  sourcesLines.push('## Verified hadiths');\n  for (const h of hadiths) {\n    sourcesLines.push(`- ${h.reference} — ${h.url}`);\n    if (h.english) sourcesLines.push(`  English: \"${h.english.replace(/\\s+/g, ' ').trim().slice(0, 500)}\"`);\n  }\n}\nif (!sourcesLines.length) {\n  sourcesLines.push('No sources retrieved. Decline to write and return a single line: NO_SOURCES.');\n}\n\nconst user = `Topic: ${topic.title}\\nCluster: ${topic.cluster}\\nTarget search keyword: \"${topic.keyword}\"\\n\\n${sourcesLines.join('\\n')}\\n\\nWrite the MDX body now, following every rule in the system message. Begin immediately with the answer paragraph.`;\n\nreturn [{ json: { ...topic, __system: SYSTEM, __user: user } }];"
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a09",
+      "name": "Build LLM prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"deepseek-chat\",\n  \"max_tokens\": 4096,\n  \"messages\": [\n    {\"role\": \"system\", \"content\": {{JSON.stringify($json.__system)}}},\n    {\"role\": \"user\",   \"content\": {{JSON.stringify($json.__user)}}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a0a",
+      "name": "Call DeepSeek",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300],
+      "credentials": {
+        "httpHeaderAuth": {"id": "DEEPSEEK_API_KEY", "name": "DeepSeek API Key"}
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ─────────────────────────────────────────────────────────────\n// Post-process the LLM output: auto-fix common MDX bugs, validate\n// citations & attributions, build the final MDX with frontmatter.\n//\n// Ports lib logic from the original TypeScript generator into pure JS.\n// ─────────────────────────────────────────────────────────────\nconst topic = $('Build LLM prompt').item.json;\nconst deepseek = $input.first().json;\nconst verses = topic.__verses ?? [];\nconst hadiths = topic.__hadiths ?? [];\n\nconst raw = deepseek?.choices?.[0]?.message?.content?.trim();\nif (!raw || raw === 'NO_SOURCES') {\n  return [{ json: { ...topic, __status: 'failed', __notes: ['Model returned empty or NO_SOURCES.'] } }];\n}\n\n// ---- Auto-fix pass 1: <Arabic>{ANY}</Arabic> → <Arabic>{\"quoted\"}</Arabic>\nfunction fixArabicBlocks(mdx) {\n  let count = 0;\n  const fixed = mdx.replace(/<Arabic>([\\s\\S]+?)<\\/Arabic>/g, (whole, inner) => {\n    const trimmed = inner.trim();\n    if (/^\\{\\s*(?:\"[^\"]*\"|'[^']*'|`[^`]*`)\\s*\\}$/.test(trimmed)) return whole;\n    let val = trimmed.replace(/^\\{\\s*[\"'`]?/, '').replace(/[\"'`]?\\s*\\}$/, '').trim();\n    if (!val) return whole;\n    count++;\n    return `<Arabic>{\"${val.replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"')}\"}</Arabic>`;\n  });\n  return { fixed, count };\n}\n\n// ---- Auto-fix pass 2: <https://...> autolinks → plain URL\nfunction fixAutolinks(mdx) {\n  let count = 0;\n  const fixed = mdx.replace(/<(https?:\\/\\/[^>\\s]+)>/g, (_, url) => { count++; return url; });\n  return { fixed, count };\n}\n\n// ---- Auto-fix pass 3: escaped attrs \\\" → \"\nfunction fixEscapedAttrs(mdx) {\n  let count = 0;\n  const fixed = mdx.replace(/<([A-Z][A-Za-z]*)\\b([^>]*?)\\/?>/g, (whole, tag, attrs) => {\n    if (!attrs.includes('\\\\\"')) return whole;\n    count++;\n    return whole.replace(attrs, attrs.replace(/\\\\\"/g, '\"'));\n  });\n  return { fixed, count };\n}\n\nconst a = fixArabicBlocks(raw);\nconst b = fixAutolinks(a.fixed);\nconst c = fixEscapedAttrs(b.fixed);\nconst mdx = c.fixed;\nconst autofixTotal = a.count + b.count + c.count;\n\n// ---- Validate <Citation> references match fetched sources\nconst allowed = new Set();\nfor (const v of verses) allowed.add(v.reference.toLowerCase());\nfor (const h of hadiths) allowed.add(h.reference.toLowerCase());\n\nconst cited = [];\nconst citeRe = /<Citation\\s+([^/]*?)\\/>/g;\nlet m;\nwhile ((m = citeRe.exec(mdx))) {\n  const attrs = m[1];\n  const source = (attrs.match(/source=\"([^\"]+)\"/) ?? [])[1] ?? '';\n  const book = (attrs.match(/book=\"([^\"]+)\"/) ?? [])[1] ?? '';\n  const num = (attrs.match(/number=\"([^\"]+)\"/) ?? [])[1] ?? '';\n  const ref = [source, book, num].filter(Boolean).join(' ').trim().toLowerCase();\n  if (ref) cited.push(ref);\n}\n\nconst notes = [];\nlet valid = true;\nfor (const ref of cited) {\n  const tokens = ref.split(/\\s+/);\n  const ok = [...allowed].some(a => tokens.every(t => a.includes(t)));\n  if (!ok) { valid = false; notes.push(`Unverified citation: \"${ref}\"`); }\n}\n\n// ---- Attribution guard: uncited \"the Prophet said\" / \"Allah says\"\nconst attrPatterns = [\n  /\\b(?:the\\s+)?(?:prophet|messenger|he)\\s*(?:ﷺ|\\(saw\\)|\\(pbuh\\))?\\s+(said|narrated|reported|taught|told|mentioned|explained|warned|advised|instructed|declared|stated|informed|described|promised|ordered|commanded|prohibited|forbade)\\b/gi,\n  /\\b(?:allah(?:'s)?|the\\s+almighty|the\\s+quran|the\\s+qur'an|allah\\s+ta'ala|almighty\\s+allah|god)\\s+(said|says|tells|told|reveals|revealed|declares|declared|commands|commanded|warns|warned|instructs|instructed|informs|informed|promises|promised)\\b/gi\n];\nconst seenAttr = new Set();\nfor (const re of attrPatterns) {\n  let am;\n  while ((am = re.exec(mdx))) {\n    const start = am.index;\n    const window = mdx.slice(start, Math.min(mdx.length, start + 500));\n    const hasAnchor =\n      /<Citation\\b/.test(window) ||\n      /<Arabic\\b/.test(window) ||\n      /https?:\\/\\/sunnah\\.com\\//.test(window) ||\n      /https?:\\/\\/quran\\.com\\//.test(window) ||\n      /\\([^)]*(?:sahih[\\s-]+(?:al[\\s-]+)?bukhari|sahih[\\s-]+muslim|(?:^|[^a-z])bukhari|(?:^|[^a-z])muslim|tirmidhi|abu[\\s-]+dawu(?:d|d)|nasa[\\s']?i|nasai|ibn[\\s-]+majah|sunan|musnad|muwatta|ahmad|quran|qur['\\u2019]?an|surah?|ayah?|(?:^|[^a-z])q\\s*\\d+:\\d+)[^)]*\\)/i.test(window);\n    if (!hasAnchor) {\n      const snippet = mdx.slice(Math.max(0, start - 20), Math.min(mdx.length, start + 120)).replace(/\\s+/g, ' ').trim();\n      const key = snippet.toLowerCase();\n      if (!seenAttr.has(key)) {\n        seenAttr.add(key);\n        valid = false;\n        notes.push(`Uncited attribution: \"…${snippet}…\"`);\n      }\n    }\n  }\n}\n\n// ---- MDX syntax sanity check\nconst arabicOpen = (mdx.match(/<Arabic\\b/g) || []).length;\nconst arabicClose = (mdx.match(/<\\/Arabic>/g) || []).length;\nif (arabicOpen !== arabicClose) { valid = false; notes.push(`Unbalanced <Arabic> tags: ${arabicOpen} vs ${arabicClose}`); }\n\nif (autofixTotal > 0) notes.push(`Auto-fixed ${autofixTotal} MDX bug(s) in generated output.`);\n\n// ---- Build frontmatter + final MDX\nconst today = new Date().toISOString().slice(0, 10);\nconst desc = `${topic.title} — sourced from authentic Quran and hadith references.`;\nconst fmLines = [\n  '---',\n  `title: ${JSON.stringify(topic.title)}`,\n  `description: ${JSON.stringify(desc)}`,\n  `cluster: ${topic.cluster}`,\n  `keyword: ${JSON.stringify(topic.keyword)}`,\n  `publishedAt: \"${today}\"`,\n  `updatedAt: \"${today}\"`\n];\nif (notes.length) fmLines.push(`reviewNotes: ${JSON.stringify(notes)}`);\nfmLines.push('---', '');\n\nconst finalMdx = fmLines.join('\\n') + mdx;\nconst path = `content/posts/${topic.cluster}/${topic.slug}.mdx`;\n\nreturn [{ json: {\n  ...topic,\n  __status: valid ? 'published' : 'needs_review',\n  __notes: notes,\n  __path: path,\n  __content: finalMdx,\n  __contentBase64: Buffer.from(finalMdx, 'utf8').toString('base64')\n} }];"
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a0b",
+      "name": "Process & validate MDX",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [
+            {"id": "1", "leftValue": "={{$json.__status}}", "rightValue": "published", "operator": {"type": "string", "operation": "equals"}}
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a0c",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.github.com/repos/{{$env.RASSOUL_REPO}}/contents/{{$json.__path}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Accept", "value": "application/vnd.github+json"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": \"content: n8n auto-generated post — {{$json.slug}}\",\n  \"content\": \"{{$json.__contentBase64}}\",\n  \"branch\": \"main\"\n}",
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a0d",
+      "name": "PUT MDX to main",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2600, 200],
+      "credentials": {
+        "httpHeaderAuth": {"id": "GITHUB_PAT", "name": "GitHub PAT"}
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Aggregate all iteration results into a single item, then rebuild topics.csv\nconst results = $input.all().map(i => i.json);\n\n// Fetch original topic list from the first iteration's __allTopics\nlet allTopics = [];\nlet header = [];\nfor (const r of results) {\n  if (r.__allTopics) { allTopics = r.__allTopics; header = r.__header; break; }\n}\n// Fallback: refetch from GitHub if we lost it (rare)\nif (!allTopics.length) {\n  throw new Error('Lost topics list mid-workflow');\n}\n\n// Build updated status map\nconst updates = new Map();\nfor (const r of results) {\n  if (r.slug && r.__status) {\n    updates.set(r.slug, {\n      status: r.__status,\n      published_at: new Date().toISOString(),\n      url: r.__status === 'published' ? `/${r.cluster}/${r.slug}` : ''\n    });\n  }\n}\n\n// Rewrite topics.csv\nconst nowIso = new Date().toISOString();\nconst newTopics = allTopics.map(t => {\n  const u = updates.get(t.slug);\n  if (!u) return t;\n  return { ...t, status: u.status, published_at: u.published_at, url: u.url };\n});\n\n// CSV serialize\nfunction escapeCell(v) {\n  const s = String(v ?? '');\n  if (/[\",\\n\\r]/.test(s)) return '\"' + s.replace(/\"/g, '\"\"') + '\"';\n  return s;\n}\nconst rowsOut = [header.join(',')];\nfor (const t of newTopics) rowsOut.push(header.map(h => escapeCell(t[h])).join(','));\nconst csvText = rowsOut.join('\\n') + '\\n';\n\nconst published = results.filter(r => r.__status === 'published').length;\nconst needsReview = results.filter(r => r.__status === 'needs_review').length;\nconst failed = results.filter(r => r.__status === 'failed').length;\n\nreturn [{ json: {\n  __csvBase64: Buffer.from(csvText, 'utf8').toString('base64'),\n  __summary: { published, needs_review: needsReview, failed, total: results.length }\n} }];"
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a0e",
+      "name": "Aggregate & build topics.csv",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2800, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{$env.RASSOUL_REPO}}/contents/content/topics.csv",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a0f",
+      "name": "Get topics.csv sha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3000, 400],
+      "credentials": {
+        "httpHeaderAuth": {"id": "GITHUB_PAT", "name": "GitHub PAT"}
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.github.com/repos/{{$env.RASSOUL_REPO}}/contents/content/topics.csv",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Accept", "value": "application/vnd.github+json"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": \"content: update topics.csv (n8n daily run)\",\n  \"content\": \"{{$('Aggregate & build topics.csv').item.json.__csvBase64}}\",\n  \"sha\": \"{{$json.sha}}\",\n  \"branch\": \"main\"\n}",
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a10",
+      "name": "PUT topics.csv",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3200, 400],
+      "credentials": {
+        "httpHeaderAuth": {"id": "GITHUB_PAT", "name": "GitHub PAT"}
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NOTIFY_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"rassoul.org daily content — {{$('Aggregate & build topics.csv').item.json.__summary.published}} published, {{$('Aggregate & build topics.csv').item.json.__summary.needs_review}} needs_review, {{$('Aggregate & build topics.csv').item.json.__summary.failed}} failed\"\n}",
+        "options": {}
+      },
+      "id": "e6b9f2c1-1a1a-4f1a-9f6a-aa1a1a1a1a11",
+      "name": "Notify (Slack/Discord)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3400, 400],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Daily 06:00 UTC": {
+      "main": [[{"node": "GET topics.csv", "type": "main", "index": 0}]]
+    },
+    "GET topics.csv": {
+      "main": [[{"node": "Pick daily batch", "type": "main", "index": 0}]]
+    },
+    "Pick daily batch": {
+      "main": [[{"node": "Loop topics", "type": "main", "index": 0}]]
+    },
+    "Loop topics": {
+      "main": [
+        [{"node": "Aggregate & build topics.csv", "type": "main", "index": 0}],
+        [{"node": "Search Quran", "type": "main", "index": 0}]
+      ]
+    },
+    "Search Quran": {
+      "main": [[{"node": "Attach verses", "type": "main", "index": 0}]]
+    },
+    "Attach verses": {
+      "main": [[{"node": "Search Sunnah", "type": "main", "index": 0}]]
+    },
+    "Search Sunnah": {
+      "main": [[{"node": "Attach hadiths", "type": "main", "index": 0}]]
+    },
+    "Attach hadiths": {
+      "main": [[{"node": "Build LLM prompt", "type": "main", "index": 0}]]
+    },
+    "Build LLM prompt": {
+      "main": [[{"node": "Call DeepSeek", "type": "main", "index": 0}]]
+    },
+    "Call DeepSeek": {
+      "main": [[{"node": "Process & validate MDX", "type": "main", "index": 0}]]
+    },
+    "Process & validate MDX": {
+      "main": [[{"node": "Valid?", "type": "main", "index": 0}]]
+    },
+    "Valid?": {
+      "main": [
+        [{"node": "PUT MDX to main", "type": "main", "index": 0}],
+        [{"node": "Loop topics", "type": "main", "index": 0}]
+      ]
+    },
+    "PUT MDX to main": {
+      "main": [[{"node": "Loop topics", "type": "main", "index": 0}]]
+    },
+    "Aggregate & build topics.csv": {
+      "main": [[{"node": "Get topics.csv sha", "type": "main", "index": 0}]]
+    },
+    "Get topics.csv sha": {
+      "main": [[{"node": "PUT topics.csv", "type": "main", "index": 0}]]
+    },
+    "PUT topics.csv": {
+      "main": [[{"node": "Notify (Slack/Discord)", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
