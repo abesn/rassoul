@@ -188,20 +188,50 @@ function findUnverifiedAttributions(mdx: string): string[] {
  */
 function fixArabicBlocks(mdx: string): { fixed: string; count: number } {
   let count = 0;
-  // Match `<Arabic>{...}</Arabic>` across newlines (whitespace between tag and
-  // brace, non-greedy body). Handles both single-line and multi-line blocks.
-  const braced = /<Arabic>\s*\{([\s\S]+?)\}\s*<\/Arabic>/g;
-  let fixed = mdx.replace(braced, (whole, raw) => {
+  // Match ANY <Arabic>...</Arabic> pair (single-line or multi-line, non-greedy).
+  // We don't require balanced braces because LLMs sometimes emit malformed
+  // blocks like `<Arabic>{"...</Arabic>` (opening brace/quote, no closer).
+  // Instead: extract the inner text, aggressively strip leading `{`, `{"`,
+  // `{'`, and trailing `"}`, `'}`, `}` — then rewrap as a proper JS string
+  // literal in JSX braces. This is idempotent for already-correct blocks.
+  const anyBlock = /<Arabic>([\s\S]+?)<\/Arabic>/g;
+  const fixed = mdx.replace(anyBlock, (whole, raw) => {
     const trimmed = raw.trim();
-    const isQuoted =
-      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-      (trimmed.startsWith("`") && trimmed.endsWith("`"));
-    if (isQuoted) return whole;
+    // If it's already a proper JSX string literal, leave alone.
+    if (/^\{\s*(?:"[^"]*"|'[^']*'|`[^`]*`)\s*\}$/.test(trimmed)) {
+      return whole;
+    }
+    // Extract just the Arabic text: strip any leading `{"`/`{'`/`{` and
+    // trailing `"}`/`'}`/`}` combos.
+    let inner = trimmed;
+    inner = inner.replace(/^\{\s*["'`]?/, "");
+    inner = inner.replace(/["'`]?\s*\}$/, "");
+    inner = inner.trim();
+    if (!inner) return whole;
     count++;
-    const safe = trimmed.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const safe = inner.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     return `<Arabic>{"${safe}"}</Arabic>`;
   });
+  return { fixed, count };
+}
+
+/**
+ * LLMs occasionally emit JSON-escaped attribute quotes in JSX tags:
+ *   <Citation source=\"Quran\" number=\"55:1\" />
+ * The `\"` breaks MDX's JSX parser. Strip stray backslashes from quote
+ * characters INSIDE any JSX tag body.
+ */
+function fixEscapedJsxAttrs(mdx: string): { fixed: string; count: number } {
+  let count = 0;
+  const fixed = mdx.replace(
+    /<([A-Z][A-Za-z]*|Arabic|Citation)\b([^>]*?)\/?>/g,
+    (whole, tag, attrs) => {
+      if (!attrs.includes('\\"')) return whole;
+      count++;
+      const cleaned = attrs.replace(/\\"/g, '"');
+      return whole.replace(attrs, cleaned);
+    },
+  );
   return { fixed, count };
 }
 
@@ -297,12 +327,14 @@ Write the MDX body now, following every rule in the system message. Begin immedi
   });
 
   // Auto-fix common LLM MDX bugs BEFORE validation:
-  //   1. <Arabic>{unquoted}</Arabic> → <Arabic>{"quoted"}</Arabic>
-  //   2. <https://url> autolinks (invalid JSX) → plain URL
+  //   1. <Arabic>{unquoted}</Arabic> and unclosed variants → <Arabic>{"quoted"}</Arabic>
+  //   2. <https://url> autolinks (invalid JSX)             → plain URL
+  //   3. JSON-escaped attributes <Tag attr=\"v\" />        → <Tag attr="v" />
   const arabicFix = fixArabicBlocks(rawMdx);
   const autolinkFix = fixMdxAutolinks(arabicFix.fixed);
-  const mdx = autolinkFix.fixed;
-  const autofixCount = arabicFix.count + autolinkFix.count;
+  const escapeFix = fixEscapedJsxAttrs(autolinkFix.fixed);
+  const mdx = escapeFix.fixed;
+  const autofixCount = arabicFix.count + autolinkFix.count + escapeFix.count;
 
   const allowed = buildAllowedReferences(verses, hadiths);
   const cited = findCitedReferences(mdx);
@@ -345,8 +377,10 @@ Write the MDX body now, following every rule in the system message. Begin immedi
   }
 
   // Note when we auto-fixed something so it shows up in the summary log.
+  // Avoid literal "<Arabic>" in the note text — it would trip a re-run of
+  // the fixer if someone reprocesses the file with frontmatter included.
   if (autofixCount > 0) {
-    notes.push(`Auto-fixed ${autofixCount} unquoted <Arabic> block(s).`);
+    notes.push(`Auto-fixed ${autofixCount} MDX bug(s) in generated output.`);
   }
 
   return { mdx, valid, notes };

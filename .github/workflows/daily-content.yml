@@ -45,16 +45,49 @@ jobs:
           DEEPSEEK_MODEL: deepseek-chat
         run: npm run generate:daily
 
-      # Compile the site with today's newly-generated MDX. If ANY page fails
-      # to prerender (bad JSX, unquoted <Arabic>, autolink pitfall, etc.),
-      # this step exits non-zero. `continue-on-error` lets the workflow move
-      # on so we still open a PR (so you can see what was generated), but
-      # the auto-merge condition below checks `outcome == 'success'` and
-      # holds the PR when the build failed.
-      - name: Verify site builds with new MDX
+      # Compile the site with today's newly-generated MDX. If any file breaks
+      # prerender, parse the offending route from the log, DELETE that file,
+      # and retry. This means a single bad MDX file no longer strands the
+      # entire batch — the broken file is dropped, the rest ship.
+      #
+      # We cap retries so a systemic problem still surfaces. `continue-on-error`
+      # lets the workflow move on either way, and the auto-merge step below
+      # checks build_check.outcome + quarantined count.
+      - name: Verify site builds; auto-quarantine broken files
         id: build_check
         continue-on-error: true
-        run: npm run build
+        run: |
+          set +e
+          quarantined_files=""
+          for attempt in 1 2 3 4 5; do
+            echo "::group::next build (attempt $attempt)"
+            npm run build > build.log 2>&1
+            code=$?
+            cat build.log
+            echo "::endgroup::"
+            if [ $code -eq 0 ]; then
+              echo "Build passed on attempt $attempt"
+              echo "quarantined=${quarantined_files# }" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # Parse "prerendering page \"/cluster/slug\"" from Next's error line.
+            broken_route=$(grep -oE 'prerendering page "[^"]+"' build.log | head -1 | sed 's/prerendering page "\(.*\)"/\1/')
+            if [ -z "$broken_route" ]; then
+              echo "Build failed but couldn't identify a broken page — bailing"
+              exit 1
+            fi
+            file="content/posts${broken_route}.mdx"
+            if [ ! -f "$file" ]; then
+              echo "Route $broken_route resolved to non-existent file $file — bailing"
+              exit 1
+            fi
+            echo "Quarantining broken file: $file"
+            rm "$file"
+            quarantined_files="$quarantined_files $file"
+          done
+          echo "Build still failing after 5 quarantine attempts — bailing"
+          echo "quarantined=${quarantined_files# }" >> "$GITHUB_OUTPUT"
+          exit 1
 
       - name: Open PR with generated content
         id: pr
@@ -73,6 +106,7 @@ jobs:
             - Failed (API errors): ${{ steps.gen.outputs.failed || '0' }}
             - Clusters skipped (no pending topics): ${{ steps.gen.outputs.skipped || '0' }}
             - Site build check: **${{ steps.build_check.outcome }}**
+            - Quarantined (deleted due to broken MDX): `${{ steps.build_check.outputs.quarantined || 'none' }}`
 
             **Auto-merge policy:** this PR auto-merges when all of these are true:
             - `needs_review` ≤ `MAX_NEEDS_REVIEW_TO_MERGE` (default 2)
