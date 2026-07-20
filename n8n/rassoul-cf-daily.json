@@ -203,7 +203,7 @@
     {
       "parameters": {
         "language": "javaScript",
-        "jsCode": "const results = $input.all().map(i => i.json);\nconst published = results.filter(r => r.__status === 'published').length;\nconst needsReview = results.filter(r => r.__status === 'needs_review').length;\nconst failed = results.filter(r => r.__status === 'failed').length;\nreturn [{ json: { published, needs_review: needsReview, failed, total: results.length } }];"
+        "jsCode": "// Loop's 'done' output emits a single signal item, not the per-iteration results.\n// Reach back into Process & compile MDX to count every iteration's __status.\nconst runs = $('Process & compile MDX').all();\nconst results = runs.map(r => r.json);\nconst published = results.filter(r => r.__status === 'published').length;\nconst needsReview = results.filter(r => r.__status === 'needs_review').length;\nconst failed = results.filter(r => r.__status === 'failed').length;\nreturn [{ json: { published, needs_review: needsReview, failed, total: results.length } }];"
       },
       "id": "cf16",
       "name": "Aggregate summary",
@@ -236,8 +236,8 @@
     "Split into topics": { "main": [[{ "node": "Loop", "type": "main", "index": 0 }]] },
     "Loop": {
       "main": [
-        [{ "node": "Search Quran", "type": "main", "index": 0 }],
-        [{ "node": "Aggregate summary", "type": "main", "index": 0 }]
+        [{ "node": "Aggregate summary", "type": "main", "index": 0 }],
+        [{ "node": "Search Quran", "type": "main", "index": 0 }]
       ]
     },
     "Search Quran": { "main": [[{ "node": "Attach verses", "type": "main", "index": 0 }]] },
