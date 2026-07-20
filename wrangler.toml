@@ -25,7 +25,7 @@ pages_build_output_dir = ".vercel/output/static"
 [[d1_databases]]
 binding = "DB"
 database_name = "rassoul-content"
-database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+database_id = "0ba6794a-b07d-40de-8e24-caab02aa61ec"
 migrations_dir = "migrations"
 
 # ---- Environment variables (public, non-secret) ----

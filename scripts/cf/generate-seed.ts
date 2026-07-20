@@ -14,9 +14,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse } from "csv-parse/sync";
 import matter from "gray-matter";
-import { serialize } from "next-mdx-remote/serialize";
-import remarkGfm from "remark-gfm";
-import rehypeSlug from "rehype-slug";
 
 const ROOT = path.resolve(__dirname, "../..");
 const POSTS_DIR = path.join(ROOT, "content", "posts");
@@ -29,36 +26,19 @@ function esc(v: string | number | null | undefined): string {
   return "'" + String(v).replace(/'/g, "''") + "'";
 }
 
-async function compileMdxToHtml(mdxBody: string): Promise<string> {
-  // We can't easily render JSX components (Arabic, Citation) to raw HTML here
-  // without a full React renderer. So we do a lightweight text-substitution pass:
-  //   - <Arabic>{"..."}</Arabic>   → <div class="arabic-block">...</div>
-  //   - <Citation source="..." book="..." number="..." href="..." />
-  //                                 → <a href="..." class="citation">source book number</a>
-  // Then process the remaining markdown to HTML via serialize's compiledSource.
-  //
-  // For the migration seed, this is best-effort. New posts from n8n use the same
-  // shapes, so the substitutions match.
-  let s = mdxBody
+function compileMdxToHtml(mdxBody: string): string {
+  // Lightweight: substitute JSX components, then run a minimal markdown parser.
+  const s = mdxBody
     .replace(/<Arabic>\s*\{["']([^"']+)["']\}\s*<\/Arabic>/g, '<div class="arabic-block">$1</div>')
     .replace(/<Arabic>\s*([^<]+?)\s*<\/Arabic>/g, '<div class="arabic-block">$1</div>')
-    .replace(
-      /<Citation\s+([^/]*?)\/>/g,
-      (_, attrs: string) => {
-        const source = /source="([^"]+)"/.exec(attrs)?.[1] ?? "";
-        const book = /book="([^"]+)"/.exec(attrs)?.[1] ?? "";
-        const number = /number="([^"]+)"/.exec(attrs)?.[1] ?? "";
-        const href = /href="([^"]+)"/.exec(attrs)?.[1] ?? "#";
-        const label = [source, book, number].filter(Boolean).join(" ");
-        return `<a href="${href}" class="citation" target="_blank" rel="noreferrer">${label}</a>`;
-      },
-    );
-
-  const compiled = await serialize(s, { mdxOptions: { remarkPlugins: [remarkGfm], rehypePlugins: [rehypeSlug], format: "mdx" } });
-  // serialize returns a compiled MDX source, not HTML. For a real HTML output
-  // we'd need to render to string. Fallback: return the marked-up text (which
-  // is already mostly HTML after our substitutions above, plus markdown).
-  // We use a minimal markdown-to-HTML pass here.
+    .replace(/<Citation\s+([^/]*?)\/>/g, (_, attrs: string) => {
+      const source = /source="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      const book = /book="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      const number = /number="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      const href = /href="([^"]+)"/.exec(attrs)?.[1] ?? "#";
+      const label = [source, book, number].filter(Boolean).join(" ");
+      return `<a href="${href}" class="citation" target="_blank" rel="noreferrer">${label}</a>`;
+    });
   return minimalMarkdownToHtml(s);
 }
 
@@ -100,7 +80,7 @@ async function main() {
       const slug = file.replace(/\.mdx$/, "");
       const raw = fs.readFileSync(path.join(dir, file), "utf8");
       const { data, content } = matter(raw);
-      const html = await compileMdxToHtml(content);
+      const html = compileMdxToHtml(content);
       const now = new Date().toISOString();
       const citations = null; // seed doesn't have per-post citation extraction; new posts from n8n will
       const reviewNotes = data.reviewNotes ? JSON.stringify(data.reviewNotes) : null;

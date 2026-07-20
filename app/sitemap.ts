@@ -1,23 +1,25 @@
 import type { MetadataRoute } from "next";
-import { getAllPosts, CLUSTERS } from "@/lib/posts";
+import { getAllPostSlugs, CLUSTERS } from "@/lib/posts";
+import { getEnv } from "@/lib/d1";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rassoul.org";
+export const runtime = "edge";
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const posts = getAllPosts();
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const site = getEnv().NEXT_PUBLIC_SITE_URL ?? "https://rassoul.org";
+  const posts = await getAllPostSlugs();
   const now = new Date();
   return [
-    { url: SITE_URL, lastModified: now, changeFrequency: "weekly", priority: 1.0 },
+    { url: `${site}/`, lastModified: now, changeFrequency: "daily", priority: 1 },
     ...CLUSTERS.map((c) => ({
-      url: `${SITE_URL}/${c.slug}`,
+      url: `${site}/${c.slug}`,
       lastModified: now,
-      changeFrequency: "weekly" as const,
+      changeFrequency: "daily" as const,
       priority: 0.8,
     })),
     ...posts.map((p) => ({
-      url: `${SITE_URL}${p.url}`,
-      lastModified: p.updatedAt ? new Date(p.updatedAt) : now,
-      changeFrequency: "monthly" as const,
+      url: `${site}/${p.cluster}/${p.slug}`,
+      lastModified: now,
+      changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
   ];
