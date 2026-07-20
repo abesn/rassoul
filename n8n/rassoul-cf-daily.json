@@ -236,8 +236,8 @@
     "Split into topics": { "main": [[{ "node": "Loop", "type": "main", "index": 0 }]] },
     "Loop": {
       "main": [
-        [{ "node": "Aggregate summary", "type": "main", "index": 0 }],
-        [{ "node": "Search Quran", "type": "main", "index": 0 }]
+        [{ "node": "Search Quran", "type": "main", "index": 0 }],
+        [{ "node": "Aggregate summary", "type": "main", "index": 0 }]
       ]
     },
     "Search Quran": { "main": [[{ "node": "Attach verses", "type": "main", "index": 0 }]] },
