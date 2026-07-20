@@ -1,0 +1,1 @@
+https://raw.githubusercontent.com/abesn/rassoul/main/n8n/rassoul-daily-content.json

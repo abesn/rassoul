@@ -1,0 +1,34 @@
+# Cloudflare Wrangler config for rassoul.org
+#
+# Deploy:
+#   npm run cf:build   # compiles Next.js for Pages via @cloudflare/next-on-pages
+#   npm run cf:deploy  # publishes to Cloudflare Pages
+#
+# Local dev with real D1:
+#   npm run cf:dev
+#
+# Migrations:
+#   npm run cf:migrate:local   # apply schema to local D1
+#   npm run cf:migrate:prod    # apply schema to production D1
+#
+# Create the D1 database once (interactively):
+#   wrangler d1 create rassoul-content
+# Then paste the returned database_id below.
+
+name = "rassoul"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+# ---- D1 database binding ----
+# Exposed to routes as `env.DB` (via getRequestContext() from @cloudflare/next-on-pages)
+[[d1_databases]]
+binding = "DB"
+database_name = "rassoul-content"
+database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+migrations_dir = "migrations"
+
+# ---- Environment variables (public, non-secret) ----
+# Secrets set separately with `wrangler pages secret put <NAME>`
+[vars]
+NEXT_PUBLIC_SITE_URL = "https://rassoul.org"

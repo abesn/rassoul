@@ -1,0 +1,262 @@
+{
+  "name": "rassoul.org — daily da'wah content (Cloudflare / D1)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 14 * * *" }] }
+      },
+      "id": "cf01",
+      "name": "Daily 14:00 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 400]
+    },
+    {
+      "parameters": { "amount": "={{ Math.floor(Math.random() * 3600) }}", "unit": "seconds" },
+      "id": "cf02",
+      "name": "Random 0-59min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "url": "=https://rassoul.org/api/admin/topics-next-batch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "cf03",
+      "name": "GET topics-next-batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 400],
+      "credentials": { "httpHeaderAuth": { "id": "ADMIN_TOKEN", "name": "Rassoul Admin Token" } }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Split the batch into one item per topic\nconst topics = $input.first().json.topics ?? [];\nreturn topics.map(t => ({ json: t }));"
+      },
+      "id": "cf04",
+      "name": "Split into topics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 400]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "cf05",
+      "name": "Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1000, 400]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.quran.com/api/v4/search?q={{encodeURIComponent($json.keyword)}}&size=5&language=en",
+        "options": {}
+      },
+      "id": "cf06",
+      "name": "Search Quran",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const topic = $('Loop').item.json;\nconst quran = $input.first().json.search?.results ?? [];\nconst verses = quran.map(r => {\n  const [s, a] = r.verse_key.split(':').map(Number);\n  return { surah: s, ayah: a, arabic: r.text, english: r.translations?.[0]?.text ?? '', reference: `Quran ${s}:${a}`, url: `https://quran.com/${s}/${a}` };\n});\nreturn [{ json: { ...topic, __verses: verses } }];"
+      },
+      "id": "cf07",
+      "name": "Attach verses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.sunnah.com/v1/hadiths?q={{encodeURIComponent($json.keyword)}}&limit=8",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "cf08",
+      "name": "Search Sunnah",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 300],
+      "credentials": { "httpHeaderAuth": { "id": "SUNNAH_API_KEY", "name": "Sunnah.com API Key" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const topic = $('Attach verses').item.json;\nconst body = $input.first().json;\nconst raw = body?.data ?? [];\nconst hadiths = raw.map(h => ({ collection: h.collection, hadithNumber: h.hadithNumber, arabic: h.hadithArabic ?? '', english: h.hadithEnglish ?? '', reference: `${h.collection} ${h.hadithNumber}`, url: `https://sunnah.com/${h.collection}:${h.hadithNumber}` }));\nreturn [{ json: { ...topic, __hadiths: hadiths } }];"
+      },
+      "id": "cf09",
+      "name": "Attach hadiths",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const topic = $input.first().json;\nconst verses = topic.__verses ?? [];\nconst hadiths = topic.__hadiths ?? [];\nconst SYSTEM = `You are a meticulous Muslim writer producing a single da'wah blog post for rassoul.org.\\n\\nNon-negotiable rules:\\n1. EVERY hadith you reference MUST come from the Verified hadiths list. Cite inline using <Citation source=\"...\" book=\"...\" number=\"...\" href=\"...\" />. Do NOT invent, paraphrase from memory, or attribute hadiths to sources not in the list.\\n2. EVERY Quran verse you reference MUST come from the Verified Quran verses list. Cite the same way.\\n3. HARD RULE — attribution requires citation. Never write \"the Prophet said\", \"Allah says\", or similar speech-attribution phrases without an adjacent <Citation> tag, <Arabic> block, or link to sunnah.com/quran.com.\\n4. Use <Arabic>{\"النص العربي\"}</Arabic> for Arabic. Always wrap in JSX string literal quotes.\\n5. Voice: respectful, scholarly, accessible. No exclamations, no emojis, no preaching.\\n6. Use ﷺ after the Prophet's name.\\n7. Output ONLY the MDX body. No frontmatter, no commentary.\\n8. Structure: open with a 1–2 sentence answer to the search intent. Then 3–6 H2 sections. End with a Sources H2 listing citations as plain markdown links.\\n9. Length: 900–1600 words.\\n10. If sources don't cover it, output ONLY the string NO_SOURCES.\\n11. NEVER use JSON-escaped quotes like source=\\\\\"X\\\\\". Use plain source=\"X\".`;\nconst sources = [];\nif (verses.length) { sources.push('## Verified Quran verses'); for (const v of verses) { sources.push(`- ${v.reference} — ${v.url}`); if (v.english) sources.push(`  English: \"${v.english.replace(/\\s+/g,' ').trim()}\"`); } }\nif (hadiths.length) { sources.push('', '## Verified hadiths'); for (const h of hadiths) { sources.push(`- ${h.reference} — ${h.url}`); if (h.english) sources.push(`  English: \"${h.english.replace(/\\s+/g,' ').trim().slice(0,500)}\"`); } }\nif (!sources.length) sources.push('No sources retrieved. Return NO_SOURCES.');\nconst user = `Topic: ${topic.title}\\nCluster: ${topic.cluster}\\nKeyword: \"${topic.keyword}\"\\n\\n${sources.join('\\n')}\\n\\nWrite the MDX body now, following every rule.`;\nreturn [{ json: { ...topic, __system: SYSTEM, __user: user } }];"
+      },
+      "id": "cf10",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"deepseek-chat\",\n  \"max_tokens\": 4096,\n  \"messages\": [\n    {\"role\": \"system\", \"content\": {{JSON.stringify($json.__system)}}},\n    {\"role\": \"user\", \"content\": {{JSON.stringify($json.__user)}}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "cf11",
+      "name": "Call DeepSeek",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 300],
+      "credentials": { "httpHeaderAuth": { "id": "DEEPSEEK_API_KEY", "name": "DeepSeek API Key" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Post-process: auto-fix MDX bugs, validate, compile MDX to HTML\nconst topic = $('Build prompt').item.json;\nconst deepseek = $input.first().json;\nconst verses = topic.__verses ?? [];\nconst hadiths = topic.__hadiths ?? [];\n\nconst raw = deepseek?.choices?.[0]?.message?.content?.trim();\nif (!raw || raw === 'NO_SOURCES') return [{ json: { ...topic, __status: 'failed', __notes: ['Model returned empty or NO_SOURCES.'] } }];\n\nfunction fixArabic(m) { let n=0; const f = m.replace(/<Arabic>([\\s\\S]+?)<\\/Arabic>/g, (w, inner) => { const t = inner.trim(); if (/^\\{\\s*(\"[^\"]*\"|'[^']*')\\s*\\}$/.test(t)) return w; let v = t.replace(/^\\{\\s*[\"'`]?/,'').replace(/[\"'`]?\\s*\\}$/,'').trim(); if (!v) return w; n++; return `<Arabic>{\"${v.replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"')}\"}</Arabic>`; }); return {fixed: f, count: n}; }\nfunction fixAutolinks(m) { let n=0; const f = m.replace(/<(https?:\\/\\/[^>\\s]+)>/g, (_, u) => { n++; return u; }); return {fixed: f, count: n}; }\nfunction fixEscapedAttrs(m) { let n=0; const f = m.replace(/<([A-Z][A-Za-z]*)\\b([^>]*?)\\/?>/g, (w, t, a) => { if (!a.includes('\\\\\"')) return w; n++; return w.replace(a, a.replace(/\\\\\"/g,'\"')); }); return {fixed: f, count: n}; }\n\nconst a = fixArabic(raw); const b = fixAutolinks(a.fixed); const c = fixEscapedAttrs(b.fixed); const mdx = c.fixed;\nconst autofixTotal = a.count + b.count + c.count;\n\n// Validate <Citation> refs match fetched sources\nconst allowed = new Set();\nfor (const v of verses) allowed.add(v.reference.toLowerCase());\nfor (const h of hadiths) allowed.add(h.reference.toLowerCase());\nconst notes = [];\nlet valid = true;\nconst citeRe = /<Citation\\s+([^/]*?)\\/>/g;\nlet cm;\nwhile ((cm = citeRe.exec(mdx))) {\n  const attrs = cm[1];\n  const src = (attrs.match(/source=\"([^\"]+)\"/) ?? [])[1] ?? '';\n  const bk = (attrs.match(/book=\"([^\"]+)\"/) ?? [])[1] ?? '';\n  const nm = (attrs.match(/number=\"([^\"]+)\"/) ?? [])[1] ?? '';\n  const ref = [src, bk, nm].filter(Boolean).join(' ').trim().toLowerCase();\n  if (ref) {\n    const toks = ref.split(/\\s+/);\n    const ok = [...allowed].some(al => toks.every(t => al.includes(t)));\n    if (!ok) { valid = false; notes.push(`Unverified citation: \"${ref}\"`); }\n  }\n}\n// Attribution guard\nconst attrPatterns = [/\\b(?:the\\s+)?(?:prophet|messenger|he)\\s*(?:ﷺ|\\(saw\\)|\\(pbuh\\))?\\s+(said|narrated|reported|taught|told|mentioned|explained|warned|advised|instructed|declared|stated|informed|described|promised|ordered|commanded|prohibited|forbade)\\b/gi, /\\b(?:allah(?:'s)?|the\\s+almighty|the\\s+quran|the\\s+qur'an)\\s+(said|says|tells|told|reveals|revealed|declares|declared|commands|commanded)\\b/gi];\nconst seenAttr = new Set();\nfor (const re of attrPatterns) { let am; while ((am = re.exec(mdx))) { const start = am.index; const win = mdx.slice(start, Math.min(mdx.length, start + 500)); const hasAnchor = /<Citation\\b/.test(win) || /<Arabic\\b/.test(win) || /https?:\\/\\/sunnah\\.com\\//.test(win) || /https?:\\/\\/quran\\.com\\//.test(win) || /\\([^)]*(?:sahih|bukhari|muslim|tirmidhi|abu\\s*dawud|nasa|ibn\\s*majah|sunan|musnad|quran|surah|ayah)[^)]*\\)/i.test(win); if (!hasAnchor) { const snip = mdx.slice(Math.max(0, start-20), Math.min(mdx.length, start+120)).replace(/\\s+/g,' ').trim(); const k = snip.toLowerCase(); if (!seenAttr.has(k)) { seenAttr.add(k); valid = false; notes.push(`Uncited attribution: \"…${snip}…\"`); } } } }\nif (autofixTotal > 0) notes.push(`Auto-fixed ${autofixTotal} MDX bug(s).`);\n\n// Compile MDX to HTML (lightweight — matches the seed script's approach)\nfunction mdxToHtml(m) {\n  let s = m.replace(/<Arabic>\\s*\\{\"([^\"]+)\"\\}\\s*<\\/Arabic>/g, '<div class=\"arabic-block\">$1</div>')\n           .replace(/<Citation\\s+([^/]*?)\\/>/g, (_, a) => { const src = /source=\"([^\"]+)\"/.exec(a)?.[1] ?? ''; const bk = /book=\"([^\"]+)\"/.exec(a)?.[1] ?? ''; const nm = /number=\"([^\"]+)\"/.exec(a)?.[1] ?? ''; const hf = /href=\"([^\"]+)\"/.exec(a)?.[1] ?? '#'; const lbl = [src, bk, nm].filter(Boolean).join(' '); return `<a href=\"${hf}\" class=\"citation\" target=\"_blank\" rel=\"noreferrer\">${lbl}</a>`; });\n  let out = s.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>').replace(/\\*([^*]+)\\*/g, '<em>$1</em>').replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href=\"$2\">$1</a>').replace(/^- (.+)$/gm, '<li>$1</li>');\n  out = out.replace(/(<li>[\\s\\S]+?<\\/li>\\n?)+/g, '<ul>$&</ul>');\n  const blocks = out.split(/\\n\\n+/).map(b => { const t = b.trim(); if (!t) return ''; if (/^<(h[1-6]|ul|ol|div|p|blockquote|pre|figure|table|a)/.test(t)) return t; return `<p>${t.replace(/\\n/g,' ')}</p>`; });\n  return blocks.join('\\n');\n}\n\nconst html = mdxToHtml(mdx);\n// Extract citation URLs from mdx for the citations field\nconst citations = [];\nconst urlRe = /https?:\\/\\/(?:sunnah|quran)\\.com\\/[^\\s\"'<>)]+/g;\nlet um;\nwhile ((um = urlRe.exec(mdx))) citations.push(um[0]);\n\nconst desc = `${topic.title} — sourced from authentic Quran and hadith references.`;\nreturn [{ json: { ...topic, __status: valid ? 'published' : 'needs_review', __notes: notes, __body: { slug: topic.slug, cluster: topic.cluster, title: topic.title, description: desc, keyword: topic.keyword, html: html, rawMdx: mdx, citations: [...new Set(citations)], reviewNotes: notes, status: valid ? 'published' : 'needs_review' } } }];"
+      },
+      "id": "cf12",
+      "name": "Process & compile MDX",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "1", "leftValue": "={{$json.__status}}", "rightValue": "failed", "operator": { "type": "string", "operation": "notEquals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cf13",
+      "name": "Publishable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2600, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://rassoul.org/api/admin/publish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.__body) }}",
+        "options": {}
+      },
+      "id": "cf14",
+      "name": "POST /api/admin/publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2800, 200],
+      "credentials": { "httpHeaderAuth": { "id": "ADMIN_TOKEN", "name": "Rassoul Admin Token" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://rassoul.org/api/admin/mark-failed",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({slug: $json.slug, cluster: $json.cluster, reason: ($json.__notes ?? []).join('; ')}) }}",
+        "options": {}
+      },
+      "id": "cf15",
+      "name": "POST /api/admin/mark-failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2800, 400],
+      "credentials": { "httpHeaderAuth": { "id": "ADMIN_TOKEN", "name": "Rassoul Admin Token" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const results = $input.all().map(i => i.json);\nconst published = results.filter(r => r.__status === 'published').length;\nconst needsReview = results.filter(r => r.__status === 'needs_review').length;\nconst failed = results.filter(r => r.__status === 'failed').length;\nreturn [{ json: { published, needs_review: needsReview, failed, total: results.length } }];"
+      },
+      "id": "cf16",
+      "name": "Aggregate summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3000, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.NOTIFY_FROM_EMAIL}}",
+        "toEmail": "={{$env.NOTIFY_TO_EMAIL}}",
+        "subject": "=rassoul.org daily content — {{$json.published}} published, {{$json.needs_review}} needs review, {{$json.failed}} failed",
+        "emailFormat": "text",
+        "text": "=Today's run:\n- Published: {{$json.published}}\n- Needs review: {{$json.needs_review}}\n- Failed: {{$json.failed}}\n\nSite: https://rassoul.org",
+        "options": {}
+      },
+      "id": "cf17",
+      "name": "Email summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3200, 400],
+      "credentials": { "smtp": { "id": "SMTP_ACCOUNT", "name": "SMTP" } },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Daily 14:00 UTC": { "main": [[{ "node": "Random 0-59min", "type": "main", "index": 0 }]] },
+    "Random 0-59min": { "main": [[{ "node": "GET topics-next-batch", "type": "main", "index": 0 }]] },
+    "GET topics-next-batch": { "main": [[{ "node": "Split into topics", "type": "main", "index": 0 }]] },
+    "Split into topics": { "main": [[{ "node": "Loop", "type": "main", "index": 0 }]] },
+    "Loop": {
+      "main": [
+        [{ "node": "Aggregate summary", "type": "main", "index": 0 }],
+        [{ "node": "Search Quran", "type": "main", "index": 0 }]
+      ]
+    },
+    "Search Quran": { "main": [[{ "node": "Attach verses", "type": "main", "index": 0 }]] },
+    "Attach verses": { "main": [[{ "node": "Search Sunnah", "type": "main", "index": 0 }]] },
+    "Search Sunnah": { "main": [[{ "node": "Attach hadiths", "type": "main", "index": 0 }]] },
+    "Attach hadiths": { "main": [[{ "node": "Build prompt", "type": "main", "index": 0 }]] },
+    "Build prompt": { "main": [[{ "node": "Call DeepSeek", "type": "main", "index": 0 }]] },
+    "Call DeepSeek": { "main": [[{ "node": "Process & compile MDX", "type": "main", "index": 0 }]] },
+    "Process & compile MDX": { "main": [[{ "node": "Publishable?", "type": "main", "index": 0 }]] },
+    "Publishable?": {
+      "main": [
+        [{ "node": "POST /api/admin/publish", "type": "main", "index": 0 }],
+        [{ "node": "POST /api/admin/mark-failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST /api/admin/publish": { "main": [[{ "node": "Loop", "type": "main", "index": 0 }]] },
+    "POST /api/admin/mark-failed": { "main": [[{ "node": "Loop", "type": "main", "index": 0 }]] },
+    "Aggregate summary": { "main": [[{ "node": "Email summary", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveDataSuccessExecution": "all", "saveDataErrorExecution": "all" }
+}
